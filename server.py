@@ -38,6 +38,9 @@ GAMES = {
     "valorant": {"name": "Valorant", "url": "https://funpay.com/lots/612/", "offer_id": "612"},
 }
 
+MAX_PER_GAME = 4000
+MAX_TOTAL_LOTS = 8000
+
 LOTS_CACHE = {"timestamp": 0, "data": [], "errors": {}, "updating": False}
 RATES_CACHE = {"timestamp": 0, "rates": {"RUB": 1.0, "USD": 0.0105, "KZT": 5.2}}
 USER_SESSIONS = {}
@@ -57,7 +60,7 @@ def fp_request(method: str, url: str, **kwargs) -> requests.Response:
         headers=headers,
         cookies=cookies,
         proxies=PROXIES,
-        timeout=kwargs.pop("timeout", (5, 10)),
+        timeout=kwargs.pop("timeout", (6, 12)),
         **kwargs,
     )
 
@@ -88,7 +91,6 @@ def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> l
         return lots
 
     tree = lxml_html.fromstring(html_content)
-    # Ищем любые карточки лотов FunPay (основные и дополнительные классы)
     items = tree.xpath(
         '//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ") '
         'or contains(concat(" ", normalize-space(@class), " "), " offer-item ")]'
@@ -160,12 +162,10 @@ def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> l
 
 
 def detect_offer_params(html_content: str, fallback_id: str) -> tuple[str, str]:
-    """Пытается достать реальные параметры подгрузки лотов из разметки страницы."""
     tree = lxml_html.fromstring(html_content)
     offer_type = "lots"
     offer_id = fallback_id
 
-    # Ищем элементы с data-offer-type или data-id / data-node
     for el in tree.xpath('//*[@data-offer-type or @data-node-id or @data-offer]'):
         if el.get("data-offer-type"):
             offer_type = el.get("data-offer-type")
@@ -181,7 +181,6 @@ def detect_offer_params(html_content: str, fallback_id: str) -> tuple[str, str]:
 def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional[str]]:
     lots = []
     seen_ids = set()
-    max_per_game = 350
 
     try:
         resp = fp_request("GET", game_info["url"])
@@ -189,14 +188,13 @@ def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional
         html_text = resp.text
         base_lots = extract_lots_from_html(html_text, game_key, seen_ids)
         lots.extend(base_lots)
-        print(f"[PARSER] {game_key} page 1: +{len(base_lots)} (total {len(lots)})", flush=True)
+        print(f"[PARSER] {game_key} base: +{len(base_lots)} (total {len(lots)})", flush=True)
 
         offer_type, offer_id = detect_offer_params(html_text, game_info.get("offer_id", ""))
 
-        # Пробуем подтянуть следующие страницы через AJAX /lots/offer
         if offer_id and len(lots) >= 10:
-            for page in range(2, 9):
-                if len(lots) >= max_per_game:
+            for page in range(2, 45):
+                if len(lots) >= MAX_PER_GAME:
                     break
                 added_on_page = 0
                 for payload in (
@@ -212,11 +210,10 @@ def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional
                                 "referer": game_info["url"],
                             },
                             data=payload,
-                            timeout=(4, 7),
+                            timeout=(4, 8),
                         )
                         if ajax_resp.status_code == 200:
                             raw_txt = ajax_resp.text
-                            # Иногда FunPay возвращает HTML внутри JSON-поля
                             if raw_txt.lstrip().startswith("{"):
                                 try:
                                     j = json.loads(raw_txt)
@@ -227,16 +224,17 @@ def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional
                             if extra:
                                 lots.extend(extra)
                                 added_on_page += len(extra)
-                                print(f"[PARSER] {game_key} ajax p.{page}: +{len(extra)} (total {len(lots)})", flush=True)
+                                print(f"[PARSER] {game_key} p.{page}: +{len(extra)} (total {len(lots)})", flush=True)
                                 break
                     except Exception:
                         continue
                 if added_on_page == 0:
                     break
+                time.sleep(0.25)
 
         del resp, html_text
         gc.collect()
-        return game_key, lots[:max_per_game], None
+        return game_key, lots[:MAX_PER_GAME], None
     except Exception as e:
         print(f"[PARSER ERROR] {game_key}: {e}", flush=True)
         return game_key, [], str(e)
@@ -258,7 +256,7 @@ def refresh_cache_sync():
                 if err:
                     errors[g_key] = err
         if all_lots:
-            LOTS_CACHE["data"] = all_lots
+            LOTS_CACHE["data"] = all_lots[:MAX_TOTAL_LOTS]
         LOTS_CACHE["errors"] = errors
         LOTS_CACHE["timestamp"] = time.time()
     finally:
