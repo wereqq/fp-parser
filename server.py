@@ -34,8 +34,8 @@ HEADERS = {
 }
 
 GAMES = {
-    "dota2": {"name": "Dota 2", "url": "https://funpay.com/lots/81/"},
-    "valorant": {"name": "Valorant", "url": "https://funpay.com/lots/612/"},
+    "dota2": {"name": "Dota 2", "url": "https://funpay.com/lots/81/", "offer_id": "81"},
+    "valorant": {"name": "Valorant", "url": "https://funpay.com/lots/612/", "offer_id": "612"},
 }
 
 LOTS_CACHE = {"timestamp": 0, "data": [], "errors": {}, "updating": False}
@@ -82,71 +82,107 @@ def update_exchange_rates():
         pass
 
 
-def parse_game_lots(game_key: str, url: str) -> tuple[str, list, Optional[str]]:
+def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> list:
     lots = []
+    tree = lxml_html.fromstring(html_content)
+    items = tree.xpath('//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ")]')
+
+    for item in items:
+        href = item.get("href", "")
+        lot_id_match = re.search(r"id=(\d+)", href)
+        lot_id = lot_id_match.group(1) if lot_id_match else href
+        if not lot_id or lot_id in seen_ids:
+            continue
+        seen_ids.add(lot_id)
+
+        desc_nodes = item.xpath('.//*[contains(@class, "tc-desc-text")]')
+        desc = " ".join(desc_nodes[0].text_content().split()) if desc_nodes else "Без описания"
+
+        tags = []
+        for col in item.xpath('.//*[contains(@class, "tc-server") or contains(@class, "tc-side") or contains(@class, "tc-amount")]'):
+            txt = " ".join(col.text_content().split())
+            if txt:
+                tags.append(txt)
+
+        seller_nodes = item.xpath('.//*[contains(@class, "media-user-name")]')
+        seller = seller_nodes[0].text_content().strip() if seller_nodes else "Продавец"
+
+        seller_id = None
+        avatar_nodes = item.xpath('.//*[contains(@class, "avatar-photo")]')
+        if avatar_nodes and avatar_nodes[0].get("data-href"):
+            m = re.search(r"/users/(\d+)/", avatar_nodes[0].get("data-href"))
+            if m:
+                seller_id = int(m.group(1))
+
+        rev_nodes = item.xpath('.//*[contains(@class, "rating-mini-count")]')
+        reviews = rev_nodes[0].text_content().strip() if rev_nodes else "0"
+
+        price_nodes = item.xpath('.//*[contains(@class, "tc-price")]')
+        price_val = 0.0
+        price_str = "—"
+        if price_nodes:
+            price_str = " ".join(price_nodes[0].text_content().split())
+            try:
+                price_val = float(price_nodes[0].get("data-s", 0))
+            except ValueError:
+                price_val = 0.0
+
+        lots.append({
+            "id": lot_id,
+            "game": game_key,
+            "game_name": GAMES[game_key]["name"],
+            "title": desc[:110] + ("..." if len(desc) > 110 else ""),
+            "description": desc,
+            "tags": tags,
+            "price": price_val,
+            "price_str": price_str,
+            "seller": seller,
+            "seller_id": seller_id,
+            "reviews": reviews,
+            "online": item.get("data-online") == "1",
+            "url": href if href.startswith("http") else f"https://funpay.com{href}",
+        })
+
+    del tree, items
+    return lots
+
+
+def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional[str]]:
+    lots = []
+    seen_ids = set()
+    max_per_game = 350
+
     try:
-        resp = fp_request("GET", url)
+        resp = fp_request("GET", game_info["url"])
         resp.raise_for_status()
+        lots.extend(extract_lots_from_html(resp.content, game_key, seen_ids))
 
-        tree = lxml_html.fromstring(resp.content)
-        items = tree.xpath('//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ")]')[:120]
-
-        for item in items:
-            href = item.get("href", "")
-            lot_id_match = re.search(r"id=(\d+)", href)
-            lot_id = lot_id_match.group(1) if lot_id_match else href
-
-            desc_nodes = item.xpath('.//*[contains(@class, "tc-desc-text")]')
-            desc = " ".join(desc_nodes[0].text_content().split()) if desc_nodes else "Без описания"
-
-            tags = []
-            for col in item.xpath('.//*[contains(@class, "tc-server") or contains(@class, "tc-side") or contains(@class, "tc-amount")]'):
-                txt = " ".join(col.text_content().split())
-                if txt:
-                    tags.append(txt)
-
-            seller_nodes = item.xpath('.//*[contains(@class, "media-user-name")]')
-            seller = seller_nodes[0].text_content().strip() if seller_nodes else "Продавец"
-
-            seller_id = None
-            avatar_nodes = item.xpath('.//*[contains(@class, "avatar-photo")]')
-            if avatar_nodes and avatar_nodes[0].get("data-href"):
-                m = re.search(r"/users/(\d+)/", avatar_nodes[0].get("data-href"))
-                if m:
-                    seller_id = int(m.group(1))
-
-            rev_nodes = item.xpath('.//*[contains(@class, "rating-mini-count")]')
-            reviews = rev_nodes[0].text_content().strip() if rev_nodes else "0"
-
-            price_nodes = item.xpath('.//*[contains(@class, "tc-price")]')
-            price_val = 0.0
-            price_str = "—"
-            if price_nodes:
-                price_str = " ".join(price_nodes[0].text_content().split())
+        # Добираем следующие страницы через AJAX FunPay, если доступно
+        offer_id = game_info.get("offer_id")
+        if offer_id and len(lots) >= 20:
+            for page in range(2, 8):
+                if len(lots) >= max_per_game:
+                    break
                 try:
-                    price_val = float(price_nodes[0].get("data-s", 0))
-                except ValueError:
-                    price_val = 0.0
+                    ajax_resp = fp_request(
+                        "POST",
+                        "https://funpay.com/lots/offer",
+                        headers={"x-requested-with": "XMLHttpRequest"},
+                        data={"nodeId": offer_id, "page": page},
+                        timeout=(4, 7),
+                    )
+                    if ajax_resp.status_code != 200:
+                        break
+                    extra = extract_lots_from_html(ajax_resp.text, game_key, seen_ids)
+                    if not extra:
+                        break
+                    lots.extend(extra)
+                except Exception:
+                    break
 
-            lots.append({
-                "id": lot_id,
-                "game": game_key,
-                "game_name": GAMES[game_key]["name"],
-                "title": desc[:110] + ("..." if len(desc) > 110 else ""),
-                "description": desc,
-                "tags": tags,
-                "price": price_val,
-                "price_str": price_str,
-                "seller": seller,
-                "seller_id": seller_id,
-                "reviews": reviews,
-                "online": item.get("data-online") == "1",
-                "url": href if href.startswith("http") else f"https://funpay.com{href}",
-            })
-
-        del resp, tree, items
+        del resp
         gc.collect()
-        return game_key, lots, None
+        return game_key, lots[:max_per_game], None
     except Exception as e:
         return game_key, [], str(e)
 
@@ -160,7 +196,7 @@ def refresh_cache_sync():
         all_lots = []
         errors = {}
         with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = [pool.submit(parse_game_lots, k, v["url"]) for k, v in GAMES.items()]
+            futures = [pool.submit(parse_game_lots, k, v) for k, v in GAMES.items()]
             for f in futures:
                 g_key, g_lots, err = f.result()
                 all_lots.extend(g_lots)
