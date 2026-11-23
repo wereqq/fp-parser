@@ -1,3 +1,4 @@
+import gc
 import json
 import os
 import re
@@ -54,19 +55,19 @@ def fp_request(method: str, url: str, **kwargs) -> requests.Response:
         url=url,
         headers=headers,
         proxies=PROXIES,
-        timeout=kwargs.pop("timeout", 20),
+        timeout=kwargs.pop("timeout", 10),
         **kwargs,
     )
 
 
-def parse_game_lots(game_key: str, url: str) -> list:
+def parse_game_lots(game_key: str, url: str) -> tuple[list, Optional[str]]:
     lots = []
     try:
         resp = fp_request("GET", url)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
 
-        for item in soup.select("a.tc-item"):
+        for item in soup.select("a.tc-item")[:150]:
             href = item.get("href", "")
             lot_id_match = re.search(r"id=(\d+)", href)
             lot_id = lot_id_match.group(1) if lot_id_match else href
@@ -74,11 +75,11 @@ def parse_game_lots(game_key: str, url: str) -> list:
             desc_el = item.select_one(".tc-desc-text")
             desc = desc_el.get_text(" ", strip=True) if desc_el else "Без описания"
 
-            tags = []
-            for col in item.select(".tc-server, .tc-side, .tc-amount"):
-                txt = col.get_text(" ", strip=True)
-                if txt:
-                    tags.append(txt)
+            tags = [
+                col.get_text(" ", strip=True)
+                for col in item.select(".tc-server, .tc-side, .tc-amount")
+                if col.get_text(strip=True)
+            ]
 
             seller_el = item.select_one(".media-user-name")
             seller = seller_el.get_text(strip=True) if seller_el else "Продавец"
@@ -103,8 +104,6 @@ def parse_game_lots(game_key: str, url: str) -> list:
                 except ValueError:
                     price_val = 0.0
 
-            online = item.get("data-online") == "1"
-
             lots.append({
                 "id": lot_id,
                 "game": game_key,
@@ -117,12 +116,16 @@ def parse_game_lots(game_key: str, url: str) -> list:
                 "seller": seller,
                 "seller_id": seller_id,
                 "reviews": reviews,
-                "online": online,
+                "online": item.get("data-online") == "1",
                 "url": href if href.startswith("http") else f"https://funpay.com{href}",
             })
+
+        soup.decompose()
+        del resp, soup
+        gc.collect()
+        return lots, None
     except Exception as e:
-        print(f"[Ошибка парсинга {game_key}]: {e}")
-    return lots
+        return [], str(e)
 
 
 def get_fp_session(golden_key: str) -> dict:
@@ -167,16 +170,21 @@ def serve_frontend():
 @app.get("/api/lots")
 def api_lots(force: bool = False):
     now = time.time()
+    errors = {}
     if force or (now - LOTS_CACHE["timestamp"] > 60) or not LOTS_CACHE["data"]:
         all_lots = []
         for g_key, g_info in GAMES.items():
-            all_lots.extend(parse_game_lots(g_key, g_info["url"]))
+            game_lots, err = parse_game_lots(g_key, g_info["url"])
+            all_lots.extend(game_lots)
+            if err:
+                errors[g_key] = err
         LOTS_CACHE["data"] = all_lots
         LOTS_CACHE["timestamp"] = now
 
     return {
         "count": len(LOTS_CACHE["data"]),
         "proxy_active": bool(PROXIES),
+        "errors": errors,
         "updated_at": int(LOTS_CACHE["timestamp"]),
         "lots": LOTS_CACHE["data"],
     }
