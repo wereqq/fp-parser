@@ -84,8 +84,15 @@ def update_exchange_rates():
 
 def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> list:
     lots = []
+    if not html_content or not html_content.strip():
+        return lots
+
     tree = lxml_html.fromstring(html_content)
-    items = tree.xpath('//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ")]')
+    # Ищем любые карточки лотов FunPay (основные и дополнительные классы)
+    items = tree.xpath(
+        '//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ") '
+        'or contains(concat(" ", normalize-space(@class), " "), " offer-item ")]'
+    )
 
     for item in items:
         href = item.get("href", "")
@@ -95,11 +102,16 @@ def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> l
             continue
         seen_ids.add(lot_id)
 
-        desc_nodes = item.xpath('.//*[contains(@class, "tc-desc-text")]')
+        desc_nodes = item.xpath(
+            './/*[contains(@class, "tc-desc-text") or contains(@class, "offer-desc") or contains(@class, "js-offer-desc")]'
+        )
         desc = " ".join(desc_nodes[0].text_content().split()) if desc_nodes else "Без описания"
 
         tags = []
-        for col in item.xpath('.//*[contains(@class, "tc-server") or contains(@class, "tc-side") or contains(@class, "tc-amount")]'):
+        for col in item.xpath(
+            './/*[contains(@class, "tc-server") or contains(@class, "tc-side") '
+            'or contains(@class, "tc-amount") or contains(@class, "tc-param")]'
+        ):
             txt = " ".join(col.text_content().split())
             if txt:
                 tags.append(txt)
@@ -117,7 +129,7 @@ def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> l
         rev_nodes = item.xpath('.//*[contains(@class, "rating-mini-count")]')
         reviews = rev_nodes[0].text_content().strip() if rev_nodes else "0"
 
-        price_nodes = item.xpath('.//*[contains(@class, "tc-price")]')
+        price_nodes = item.xpath('.//*[contains(@class, "tc-price") or contains(@class, "offer-price")]')
         price_val = 0.0
         price_str = "—"
         if price_nodes:
@@ -147,6 +159,25 @@ def extract_lots_from_html(html_content: str, game_key: str, seen_ids: set) -> l
     return lots
 
 
+def detect_offer_params(html_content: str, fallback_id: str) -> tuple[str, str]:
+    """Пытается достать реальные параметры подгрузки лотов из разметки страницы."""
+    tree = lxml_html.fromstring(html_content)
+    offer_type = "lots"
+    offer_id = fallback_id
+
+    # Ищем элементы с data-offer-type или data-id / data-node
+    for el in tree.xpath('//*[@data-offer-type or @data-node-id or @data-offer]'):
+        if el.get("data-offer-type"):
+            offer_type = el.get("data-offer-type")
+        if el.get("data-node-id"):
+            offer_id = el.get("data-node-id")
+        elif el.get("data-offer"):
+            offer_id = el.get("data-offer")
+
+    del tree
+    return offer_type, offer_id
+
+
 def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional[str]]:
     lots = []
     seen_ids = set()
@@ -155,35 +186,59 @@ def parse_game_lots(game_key: str, game_info: dict) -> tuple[str, list, Optional
     try:
         resp = fp_request("GET", game_info["url"])
         resp.raise_for_status()
-        lots.extend(extract_lots_from_html(resp.content, game_key, seen_ids))
+        html_text = resp.text
+        base_lots = extract_lots_from_html(html_text, game_key, seen_ids)
+        lots.extend(base_lots)
+        print(f"[PARSER] {game_key} page 1: +{len(base_lots)} (total {len(lots)})", flush=True)
 
-        # Добираем следующие страницы через AJAX FunPay, если доступно
-        offer_id = game_info.get("offer_id")
-        if offer_id and len(lots) >= 20:
-            for page in range(2, 8):
+        offer_type, offer_id = detect_offer_params(html_text, game_info.get("offer_id", ""))
+
+        # Пробуем подтянуть следующие страницы через AJAX /lots/offer
+        if offer_id and len(lots) >= 10:
+            for page in range(2, 9):
                 if len(lots) >= max_per_game:
                     break
-                try:
-                    ajax_resp = fp_request(
-                        "POST",
-                        "https://funpay.com/lots/offer",
-                        headers={"x-requested-with": "XMLHttpRequest"},
-                        data={"nodeId": offer_id, "page": page},
-                        timeout=(4, 7),
-                    )
-                    if ajax_resp.status_code != 200:
-                        break
-                    extra = extract_lots_from_html(ajax_resp.text, game_key, seen_ids)
-                    if not extra:
-                        break
-                    lots.extend(extra)
-                except Exception:
+                added_on_page = 0
+                for payload in (
+                    {"game": offer_id, "nodeId": offer_id, "page": page, "offerType": offer_type},
+                    {"id": offer_id, "page": page},
+                ):
+                    try:
+                        ajax_resp = fp_request(
+                            "POST",
+                            "https://funpay.com/lots/offer",
+                            headers={
+                                "x-requested-with": "XMLHttpRequest",
+                                "referer": game_info["url"],
+                            },
+                            data=payload,
+                            timeout=(4, 7),
+                        )
+                        if ajax_resp.status_code == 200:
+                            raw_txt = ajax_resp.text
+                            # Иногда FunPay возвращает HTML внутри JSON-поля
+                            if raw_txt.lstrip().startswith("{"):
+                                try:
+                                    j = json.loads(raw_txt)
+                                    raw_txt = j.get("html") or j.get("content") or j.get("offers") or ""
+                                except Exception:
+                                    pass
+                            extra = extract_lots_from_html(str(raw_txt), game_key, seen_ids)
+                            if extra:
+                                lots.extend(extra)
+                                added_on_page += len(extra)
+                                print(f"[PARSER] {game_key} ajax p.{page}: +{len(extra)} (total {len(lots)})", flush=True)
+                                break
+                    except Exception:
+                        continue
+                if added_on_page == 0:
                     break
 
-        del resp
+        del resp, html_text
         gc.collect()
         return game_key, lots[:max_per_game], None
     except Exception as e:
+        print(f"[PARSER ERROR] {game_key}: {e}", flush=True)
         return game_key, [], str(e)
 
 
