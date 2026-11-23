@@ -336,6 +336,12 @@
     .grid.list-view .tags { margin-top: 0; max-width: 220px; }
     .grid.list-view .card-foot { border-top: none; padding-top: 0; min-width: 310px; justify-content: flex-end; align-items: center; gap: 14px; }
 
+    .load-more-wrap {
+      grid-column: 1 / -1;
+      display: flex; justify-content: center; padding-top: 14px;
+    }
+    .load-more-btn { height: 42px; padding: 0 28px; font-size: 11.5px; }
+
     .skeleton {
       height: 186px; border-radius: 26px;
       background: linear-gradient(110deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.03) 75%);
@@ -520,7 +526,7 @@
 
       <div class="adv-row">
         <button id="fOnline" onclick="toggleQuickFilter('online', this)" data-i18n="online">Онлайн</button>
-        <button id="fNoRent" class="pill-active" onclick="toggleQuickFilter('noRent', this)" data-i18n="noRent">Без аренды / буста</button>
+        <button id="fNoRent" onclick="toggleQuickFilter('noRent', this)" data-i18n="noRent">Без аренды / буста</button>
         <button id="fNative" onclick="toggleQuickFilter('native', this)" data-i18n="nativeMail">Родная почта</button>
         <button id="fAuto" onclick="toggleQuickFilter('auto', this)" data-i18n="autoDelivery">Автовыдача</button>
         <button id="fSkins" onclick="toggleQuickFilter('skins', this)" data-i18n="skinsFilter">Аркана / Нож / Скины</button>
@@ -602,7 +608,8 @@
         nativeMail: "Родная почта", autoDelivery: "Автовыдача", skinsFilter: "Аркана / Нож / Скины",
         highBeh: "Порядочность 10k+", reset: "Сбросить",
         chatBtn: "Чат", write: "Написать", profitTag: "ВЫГОДА", estMarket: "Рынок ~",
-        pcs: "шт.", newLotToast: "НОВЫЙ ЛОТ", goToLot: "Перейти на лот ↗",
+        pcs: "шт.", loadMore: "Показать ещё (+300)", left: "осталось",
+        newLotToast: "НОВЫЙ ЛОТ", goToLot: "Перейти на лот ↗",
         authTitle: "Авторизация FunPay",
         authDesc: "Вставь свой golden_key из cookies FunPay. Он хранится только в браузере и нужен для чатов.",
         keyPh: "Вставь golden_key...", logout: "Выйти", cancel: "Отмена", connect: "Подключить",
@@ -628,7 +635,8 @@
         nativeMail: "Original email", autoDelivery: "Auto-delivery", skinsFilter: "Arcana / Knife / Skins",
         highBeh: "10k+ Behavior", reset: "Reset",
         chatBtn: "Chat", write: "Message", profitTag: "PROFIT", estMarket: "Market ~",
-        pcs: "lots", newLotToast: "NEW LOT", goToLot: "Open lot ↗",
+        pcs: "lots", loadMore: "Load more (+300)", left: "left",
+        newLotToast: "NEW LOT", goToLot: "Open lot ↗",
         authTitle: "FunPay Auth",
         authDesc: "Paste your golden_key from FunPay cookies. Stored locally in your browser for chat sync.",
         keyPh: "Paste golden_key...", logout: "Log out", cancel: "Cancel", connect: "Connect",
@@ -645,7 +653,6 @@
       }
     };
 
-    const CURRENCY_SYMBOLS = { RUB: "₽", USD: "$", KZT: "₸" };
     let currentLang = localStorage.getItem("fp_lang") || "ru";
     let currentCurrency = localStorage.getItem("fp_curr") || "RUB";
     let exchangeRates = { RUB: 1.0, USD: 0.0105, KZT: 5.2 };
@@ -681,16 +688,16 @@
       currentLang = currentLang === "ru" ? "en" : "ru";
       localStorage.setItem("fp_lang", currentLang);
       applyLang();
-      renderLots();
+      renderLots(false);
     }
 
     function setCurrency(curr) {
       currentCurrency = curr;
       localStorage.setItem("fp_curr", curr);
-      renderLots();
+      renderLots(false);
     }
 
-    /* ================= РЕАЛЬНАЯ РЫНОЧНАЯ МЕДИАНА (БЕЗ НАУГАД) ================= */
+    /* ================= РЕАЛЬНАЯ РЫНОЧНАЯ МЕДИАНА ================= */
     function getMedian(arr) {
       if (!arr.length) return 0;
       const s = [...arr].sort((a, b) => a - b);
@@ -699,7 +706,6 @@
     }
 
     function processLotsWithMarket(rawLots) {
-      // Шаг 1: парсим параметры и определяем рыночную категорию (корзину)
       const parsed = rawLots.map(l => {
         const text = (l.description + " " + (l.tags || []).join(" ")).toLowerCase();
         const reviewsNum = parseInt(String(l.reviews || "0").replace(/\D/g, ""), 10) || 0;
@@ -718,7 +724,7 @@
         if (!isRentOrBoost && l.price >= 80) {
           if (l.game === "dota2") {
             if (mmr >= 1000) {
-              const step = Math.min(Math.floor(mmr / 1000), 8); // 1k..8k+
+              const step = Math.min(Math.floor(mmr / 1000), 8);
               bucket = `dota_${step}k`;
             } else if (/аркан|arcana/i.test(text)) {
               bucket = "dota_arcana";
@@ -743,7 +749,6 @@
         return { ...l, _text: text, _reviews: reviewsNum, _mmr: mmr, _isRent: isRentOrBoost, _bucket: bucket };
       });
 
-      // Шаг 2: собираем цены по корзинам
       const bucketPrices = {};
       parsed.forEach(l => {
         if (!l._bucket) return;
@@ -751,7 +756,6 @@
         bucketPrices[l._bucket].push(l.price);
       });
 
-      // Шаг 3: считаем медиану для каждой корзины (только если >= 3 конкурентов)
       const bucketStats = {};
       Object.keys(bucketPrices).forEach(b => {
         const prices = bucketPrices[b];
@@ -763,7 +767,6 @@
         }
       });
 
-      // Шаг 4: сравниваем каждый лот с реальной медианой его корзины
       return parsed.map(l => {
         const stat = l._bucket ? bucketStats[l._bucket] : null;
         let isProfitable = false;
@@ -869,9 +872,11 @@
 
     /* ================= STATE & FILTERS ================= */
     let allLots = [];
+    let lastFilteredCount = 0;
+    let visibleLimit = 500;
     let currentGame = "all";
     let profitOnly = false;
-    let quickFilters = { online: false, noRent: true, native: false, auto: false, skins: false, highBeh: false };
+    let quickFilters = { online: false, noRent: false, native: false, auto: false, skins: false, highBeh: false };
     let fpKey = localStorage.getItem("fp_golden_key") || "";
     let favIds = JSON.parse(localStorage.getItem("fp_favs") || "[]");
     let currentUser = null;
@@ -914,9 +919,8 @@
       document.getElementById("sortSelect").value = "default";
       profitOnly = false;
       document.getElementById("profitOnlyBtn").classList.remove("pill-active");
-      quickFilters = { online: false, noRent: true, native: false, auto: false, skins: false, highBeh: false };
+      quickFilters = { online: false, noRent: false, native: false, auto: false, skins: false, highBeh: false };
       document.querySelectorAll("#advPanel button[id^='f']").forEach(b => b.classList.remove("pill-active"));
-      document.getElementById("fNoRent").classList.add("pill-active");
       renderLots();
     }
 
@@ -926,6 +930,17 @@
       document.getElementById("viewGridBtn").classList.toggle("active", mode === "grid");
       document.getElementById("viewListBtn").classList.toggle("active", mode === "list");
     }
+
+    function loadMore() {
+      visibleLimit += 300;
+      renderLots(false);
+    }
+
+    window.addEventListener("scroll", () => {
+      if (visibleLimit < lastFilteredCount && (window.innerHeight + window.scrollY) >= (document.body.offsetHeight - 400)) {
+        loadMore();
+      }
+    });
 
     async function loadLots(force = false, silent = false) {
       const container = document.getElementById("lotsContainer");
@@ -949,7 +964,7 @@
         isFirstLoad = false;
 
         allLots = enriched;
-        renderLots();
+        renderLots(!silent);
       } catch (e) {
         if (!silent) container.innerHTML = `<div class="empty">${t("serverErr")}</div>`;
       } finally {
@@ -969,7 +984,7 @@
       if (favIds.includes(id)) favIds = favIds.filter(x => x !== id);
       else favIds.push(id);
       localStorage.setItem("fp_favs", JSON.stringify(favIds));
-      renderLots();
+      renderLots(false);
     }
 
     function openDetail(lotId) {
@@ -992,7 +1007,9 @@
       document.getElementById("detailModal").classList.add("open");
     }
 
-    function renderLots() {
+    function renderLots(resetLimit = true) {
+      if (resetLimit) visibleLimit = 500;
+
       const q = document.getElementById("searchInput").value.toLowerCase().trim();
       const minP = parseFloat(document.getElementById("minPrice").value);
       const maxP = parseFloat(document.getElementById("maxPrice").value);
@@ -1032,6 +1049,7 @@
       if (sort === "reviews") filtered.sort((a, b) => b._reviews - a._reviews);
       if (sort === "mmr") filtered.sort((a, b) => b._mmr - a._mmr);
 
+      lastFilteredCount = filtered.length;
       const profitCount = filtered.filter(x => x._isProfitable).length;
       document.getElementById("statsText").textContent = `${filtered.length} / ${allLots.length} · ⚡ ${profitCount}`;
 
@@ -1041,9 +1059,10 @@
         return;
       }
 
-      container.innerHTML = filtered.slice(0, 150).map((l, idx) => {
+      const shown = filtered.slice(0, visibleLimit);
+      let html = shown.map((l, idx) => {
         const isFav = favIds.includes(l.id);
-        const delay = Math.min(idx * 18, 360);
+        const delay = Math.min((idx % 60) * 10, 220);
         return `
         <div class="card ${l._isProfitable ? 'profitable' : ''}" style="animation-delay:${delay}ms;">
           <div class="card-main">
@@ -1073,6 +1092,18 @@
           </div>
         </div>`;
       }).join("");
+
+      const remaining = filtered.length - shown.length;
+      if (remaining > 0) {
+        html += `
+        <div class="load-more-wrap">
+          <button class="load-more-btn" onclick="loadMore()">
+            ${t("loadMore")} · ${t("left")} ${remaining}
+          </button>
+        </div>`;
+      }
+
+      container.innerHTML = html;
     }
 
     /* ================= AUTH & CHATS ================= */
