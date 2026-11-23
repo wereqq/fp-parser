@@ -39,6 +39,7 @@ GAMES = {
 }
 
 LOTS_CACHE = {"timestamp": 0, "data": [], "errors": {}, "updating": False}
+RATES_CACHE = {"timestamp": 0, "rates": {"RUB": 1.0, "USD": 0.0105, "KZT": 5.2}}
 USER_SESSIONS = {}
 
 
@@ -49,14 +50,36 @@ class SendMessageReq(BaseModel):
 
 def fp_request(method: str, url: str, **kwargs) -> requests.Response:
     headers = {**HEADERS, **kwargs.pop("headers", {})}
+    cookies = {"cy": "rub", "locale": "ru", **kwargs.pop("cookies", {})}
     return requests.request(
         method=method,
         url=url,
         headers=headers,
+        cookies=cookies,
         proxies=PROXIES,
         timeout=kwargs.pop("timeout", (5, 10)),
         **kwargs,
     )
+
+
+def update_exchange_rates():
+    now = time.time()
+    if now - RATES_CACHE["timestamp"] < 3600:
+        return
+    try:
+        r = requests.get("https://open.er-api.com/v6/latest/RUB", timeout=5)
+        data = r.json()
+        if data.get("result") == "success":
+            rates = data.get("rates", {})
+            if "USD" in rates and "KZT" in rates:
+                RATES_CACHE["rates"] = {
+                    "RUB": 1.0,
+                    "USD": float(rates["USD"]),
+                    "KZT": float(rates["KZT"]),
+                }
+                RATES_CACHE["timestamp"] = now
+    except Exception:
+        pass
 
 
 def parse_game_lots(game_key: str, url: str) -> tuple[str, list, Optional[str]]:
@@ -133,6 +156,7 @@ def refresh_cache_sync():
         return
     LOTS_CACHE["updating"] = True
     try:
+        update_exchange_rates()
         all_lots = []
         errors = {}
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -210,6 +234,7 @@ def api_lots(force: bool = False):
     return {
         "count": len(LOTS_CACHE["data"]),
         "proxy_active": bool(PROXIES),
+        "rates": RATES_CACHE["rates"],
         "errors": LOTS_CACHE["errors"],
         "updated_at": int(LOTS_CACHE["timestamp"]),
         "lots": LOTS_CACHE["data"],
