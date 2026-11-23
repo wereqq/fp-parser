@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from typing import Optional
@@ -11,7 +12,6 @@ from pydantic import BaseModel
 
 app = FastAPI(title="FP // PARSER")
 
-# Разрешаем CORS на случай, если позже вынесешь фронтенд на Netlify
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,21 +20,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ================= НАСТРОЙКА ПРОКСИ =================
+# Задается через Environment Variables на Render.com (ключ: PROXY_URL)
+# либо впиши прямо сюда: "http://login:pass@ip:port" или "socks5h://login:pass@ip:port"
+PROXY_URL = os.getenv("PROXY_URL", "").strip()
+
+PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# ID разделов FunPay (Аккаунты)
 GAMES = {
     "dota2": {"name": "Dota 2", "url": "https://funpay.com/lots/81/"},
     "valorant": {"name": "Valorant", "url": "https://funpay.com/lots/612/"},
 }
 
-# Кэш лотов (обновляется раз в 60 секунд) и сессий пользователей
 LOTS_CACHE = {"timestamp": 0, "data": []}
-USER_SESSIONS = {}  # golden_key -> {"csrf": str, "user_id": int, "username": str, "ts": float}
+USER_SESSIONS = {}
 
 
 class SendMessageReq(BaseModel):
@@ -42,10 +47,22 @@ class SendMessageReq(BaseModel):
     text: str
 
 
+def fp_request(method: str, url: str, **kwargs) -> requests.Response:
+    headers = {**HEADERS, **kwargs.pop("headers", {})}
+    return requests.request(
+        method=method,
+        url=url,
+        headers=headers,
+        proxies=PROXIES,
+        timeout=kwargs.pop("timeout", 20),
+        **kwargs,
+    )
+
+
 def parse_game_lots(game_key: str, url: str) -> list:
     lots = []
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = fp_request("GET", url)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
 
@@ -57,7 +74,6 @@ def parse_game_lots(game_key: str, url: str) -> list:
             desc_el = item.select_one(".tc-desc-text")
             desc = desc_el.get_text(" ", strip=True) if desc_el else "Без описания"
 
-            # Собираем доп. теги (сервер, MMR, ранг и т.д.)
             tags = []
             for col in item.select(".tc-server, .tc-side, .tc-amount"):
                 txt = col.get_text(" ", strip=True)
@@ -67,7 +83,6 @@ def parse_game_lots(game_key: str, url: str) -> list:
             seller_el = item.select_one(".media-user-name")
             seller = seller_el.get_text(strip=True) if seller_el else "Продавец"
 
-            # Достаем ID продавца, чтобы можно было сразу открыть чат
             seller_id = None
             avatar_el = item.select_one(".avatar-photo")
             if avatar_el and avatar_el.get("data-href"):
@@ -118,16 +133,11 @@ def get_fp_session(golden_key: str) -> dict:
     if cached and (time.time() - cached["ts"] < 600):
         return cached
 
-    resp = requests.get(
-        "https://funpay.com/",
-        headers=HEADERS,
-        cookies={"golden_key": golden_key},
-        timeout=15,
-    )
+    resp = fp_request("GET", "https://funpay.com/", cookies={"golden_key": golden_key})
     soup = BeautifulSoup(resp.text, "lxml")
     body = soup.find("body")
     if not body or not body.get("data-app-data"):
-        raise HTTPException(status_code=401, detail="FunPay не вернул данные сессии (возможна капча или неверный ключ)")
+        raise HTTPException(status_code=401, detail="FunPay не вернул данные сессии (проверь прокси или ключ)")
 
     app_data = json.loads(body["data-app-data"])
     user_id = app_data.get("userId", 0)
@@ -166,6 +176,7 @@ def api_lots(force: bool = False):
 
     return {
         "count": len(LOTS_CACHE["data"]),
+        "proxy_active": bool(PROXIES),
         "updated_at": int(LOTS_CACHE["timestamp"]),
         "lots": LOTS_CACHE["data"],
     }
@@ -184,12 +195,7 @@ def api_auth(x_funpay_key: Optional[str] = Header(None)):
 @app.get("/api/chats")
 def api_chats(x_funpay_key: Optional[str] = Header(None)):
     get_fp_session(x_funpay_key)
-    resp = requests.get(
-        "https://funpay.com/chat/",
-        headers=HEADERS,
-        cookies={"golden_key": x_funpay_key},
-        timeout=15,
-    )
+    resp = fp_request("GET", "https://funpay.com/chat/", cookies={"golden_key": x_funpay_key})
     soup = BeautifulSoup(resp.text, "lxml")
     chats = []
 
@@ -213,17 +219,10 @@ def api_chats(x_funpay_key: Optional[str] = Header(None)):
 @app.get("/api/chats/{node_id}")
 def api_chat_messages(node_id: str, x_funpay_key: Optional[str] = Header(None)):
     sess = get_fp_session(x_funpay_key)
-    resp = requests.get(
-        f"https://funpay.com/chat/?node={node_id}",
-        headers=HEADERS,
-        cookies={"golden_key": x_funpay_key},
-        timeout=15,
-    )
+    resp = fp_request("GET", f"https://funpay.com/chat/?node={node_id}", cookies={"golden_key": x_funpay_key})
     soup = BeautifulSoup(resp.text, "lxml")
     messages = []
 
-    # Находим реальный числовой ID ноды, если передали users-X-Y
-    chat_header = soup.select_one(".chat-header")
     real_node = soup.select_one(".chat")
     actual_node_id = real_node.get("data-id") if real_node and real_node.get("data-id") else node_id
 
@@ -272,18 +271,17 @@ def api_send_message(req: SendMessageReq, x_funpay_key: Optional[str] = Header(N
     }
 
     send_headers = {
-        **HEADERS,
         "x-requested-with": "XMLHttpRequest",
         "origin": "https://funpay.com",
         "referer": f"https://funpay.com/chat/?node={req.node_id}",
     }
 
-    resp = requests.post(
+    resp = fp_request(
+        "POST",
         "https://funpay.com/runner/",
         headers=send_headers,
         cookies={"golden_key": x_funpay_key},
         data=payload,
-        timeout=15,
     )
 
     if resp.status_code != 200:
