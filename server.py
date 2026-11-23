@@ -1,1262 +1,349 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FP // PARSER</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@200;300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #050507;
-      --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.085) 0%, rgba(255, 255, 255, 0.018) 52%, rgba(255, 255, 255, 0.045) 100%);
-      --glass-strong: linear-gradient(145deg, rgba(22, 24, 30, 0.78) 0%, rgba(12, 13, 17, 0.86) 100%);
-      --glass-hover: linear-gradient(135deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.035) 55%, rgba(255, 255, 255, 0.07) 100%);
-      --border: rgba(255, 255, 255, 0.15);
-      --border-hover: rgba(255, 255, 255, 0.34);
-      --rim-top: rgba(255, 255, 255, 0.45);
-      --rim-left: rgba(255, 255, 255, 0.2);
-      --rim-bottom: rgba(255, 255, 255, 0.07);
-      --spotlight: rgba(255, 255, 255, 0.16);
-      --text: #f6f7f9;
-      --text-soft: rgba(246, 247, 249, 0.74);
-      --muted: rgba(246, 247, 249, 0.44);
-      --accent: #ffffff;
-      --accent-inv: #07080a;
-      --profit-border: rgba(255, 255, 255, 0.58);
-      --profit-glow: 0 0 32px rgba(255, 255, 255, 0.14), inset 0 1px 1px rgba(255, 255, 255, 0.75);
-      --orb-1: rgba(255, 255, 255, 0.18);
-      --orb-2: rgba(190, 200, 220, 0.13);
-      --orb-3: rgba(130, 140, 160, 0.1);
-      --shadow: 0 18px 46px rgba(0, 0, 0, 0.52);
-      --ease: cubic-bezier(0.22, 1, 0.36, 1);
-    }
-
-    body.light {
-      --bg: #e7eaef;
-      --glass-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.25) 55%, rgba(255, 255, 255, 0.45) 100%);
-      --glass-strong: linear-gradient(145deg, rgba(255, 255, 255, 0.85) 0%, rgba(245, 247, 250, 0.88) 100%);
-      --glass-hover: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.42) 55%, rgba(255, 255, 255, 0.68) 100%);
-      --border: rgba(255, 255, 255, 0.82);
-      --border-hover: rgba(0, 0, 0, 0.22);
-      --rim-top: rgba(255, 255, 255, 1);
-      --rim-left: rgba(255, 255, 255, 0.75);
-      --rim-bottom: rgba(0, 0, 0, 0.06);
-      --spotlight: rgba(255, 255, 255, 0.9);
-      --text: #0f1116;
-      --text-soft: rgba(15, 17, 22, 0.72);
-      --muted: rgba(15, 17, 22, 0.48);
-      --accent: #0f1116;
-      --accent-inv: #ffffff;
-      --profit-border: rgba(15, 17, 22, 0.65);
-      --profit-glow: 0 10px 30px rgba(0, 0, 0, 0.14), inset 0 1px 1px rgba(255, 255, 255, 1);
-      --orb-1: rgba(255, 255, 255, 0.98);
-      --orb-2: rgba(175, 184, 200, 0.65);
-      --orb-3: rgba(140, 150, 170, 0.45);
-      --shadow: 0 14px 36px rgba(15, 23, 42, 0.1);
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Unbounded', sans-serif;
-      font-weight: 300;
-      font-size: 12px;
-      line-height: 1.55;
-      min-height: 100vh;
-      overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-      transition: background 0.4s ease, color 0.3s ease;
-    }
-
-    .wallpaper {
-      position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none;
-    }
-    .orb {
-      position: absolute; border-radius: 50%;
-      filter: blur(75px); will-change: transform;
-    }
-    .orb-1 {
-      width: 52vw; height: 52vw; top: -18vw; left: -8vw;
-      background: radial-gradient(circle, var(--orb-1), transparent 65%);
-      animation: drift1 18s ease-in-out infinite alternate;
-    }
-    .orb-2 {
-      width: 48vw; height: 48vw; bottom: -16vw; right: -6vw;
-      background: radial-gradient(circle, var(--orb-2), transparent 65%);
-      animation: drift2 22s ease-in-out infinite alternate;
-    }
-    .orb-3 {
-      width: 36vw; height: 36vw; top: 32%; left: 36%;
-      background: radial-gradient(circle, var(--orb-3), transparent 65%);
-      animation: drift3 15s ease-in-out infinite alternate;
-    }
-    @keyframes drift1 { to { transform: translate(16vw, 14vh) scale(1.15); } }
-    @keyframes drift2 { to { transform: translate(-16vw, -12vh) scale(0.92); } }
-    @keyframes drift3 { to { transform: translate(12vw, -10vh) scale(1.18); } }
-    #bgCanvas { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.55; }
-
-    .liquid {
-      background: var(--glass-bg);
-      backdrop-filter: blur(26px) saturate(185%) contrast(106%);
-      -webkit-backdrop-filter: blur(26px) saturate(185%) contrast(106%);
-      border: 1px solid var(--border);
-      box-shadow:
-        var(--shadow),
-        inset 0 1px 0.5px var(--rim-top),
-        inset 1px 0 0.5px var(--rim-left),
-        inset 0 -1px 0.5px var(--rim-bottom);
-    }
-
-    header {
-      position: sticky; top: 14px; z-index: 25;
-      max-width: 1400px; margin: 14px auto 0;
-      width: calc(100% - 32px);
-      border-radius: 999px;
-      padding: 10px 16px 10px 22px;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      animation: slideDown 0.7s var(--ease) both;
-    }
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-18px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    .brand {
-      font-size: 13px; letter-spacing: 0.14em; font-weight: 500;
-      display: flex; align-items: center; gap: 10px;
-    }
-    .dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: var(--text); box-shadow: 0 0 12px var(--text);
-      animation: pulse 2.2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 0.95; }
-      50% { transform: scale(1.35); opacity: 0.4; }
-    }
-    .actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
-
-    button, input, select {
-      font-family: 'Unbounded', sans-serif;
-      font-weight: 300; font-size: 11px;
-      height: 36px;
-      background: var(--glass-bg); color: var(--text);
-      backdrop-filter: blur(20px) saturate(170%);
-      -webkit-backdrop-filter: blur(20px) saturate(170%);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 0 14px; outline: none;
-      box-shadow: inset 0 1px 0.5px var(--rim-top), inset 0 -1px 0.5px var(--rim-bottom);
-      transition: transform 0.25s var(--ease), border-color 0.2s, background 0.2s, box-shadow 0.2s;
-    }
-    button { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
-    button:hover {
-      border-color: var(--border-hover);
-      background: var(--glass-hover);
-      transform: translateY(-1px);
-    }
-    button:active { transform: scale(0.95); }
-    button.primary {
-      background: var(--accent); color: var(--accent-inv);
-      border-color: var(--accent); font-weight: 500;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-    }
-    button.primary:hover { opacity: 0.9; background: var(--accent); }
-    button.pill-active {
-      background: var(--accent); color: var(--accent-inv);
-      border-color: var(--accent); font-weight: 500;
-    }
-    button.icon-btn { width: 36px; padding: 0; }
-    input::placeholder { color: var(--muted); }
-    input:focus, select:focus { border-color: var(--border-hover); background: var(--glass-hover); }
-    select {
-      cursor: pointer;
-      appearance: none;
-      -webkit-appearance: none;
-      padding: 0 32px 0 14px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-      background-repeat: no-repeat;
-      background-position: right 12px center;
-    }
-    select option { background: var(--bg); color: var(--text); }
-
-    .spin { display: inline-block; animation: spin360 0.8s linear infinite; }
-    @keyframes spin360 { to { transform: rotate(360deg); } }
-
-    .toolbar-wrap {
-      max-width: 1400px; margin: 16px auto 0; padding: 0 16px;
-      display: flex; flex-direction: column; gap: 10px;
-      animation: fadeUp 0.7s var(--ease) 0.06s both;
-    }
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(14px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .toolbar-row {
-      display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    }
-    .tabs {
-      display: inline-flex; align-items: center;
-      height: 36px; padding: 3px; gap: 3px; border-radius: 999px;
-    }
-    .tab {
-      height: 28px; min-width: 32px;
-      border: none; background: transparent; box-shadow: none; backdrop-filter: none;
-      padding: 0 12px; font-size: 11px; color: var(--muted); border-radius: 999px;
-    }
-    .tab:hover { color: var(--text); background: rgba(255,255,255,0.08); transform: none; }
-    .tab.active {
-      background: var(--accent); color: var(--accent-inv); font-weight: 500;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-    }
-    .search-input { flex: 1; min-width: 210px; }
-    .adv-panel {
-      border-radius: 24px; padding: 14px 18px;
-      display: none; flex-direction: column; gap: 12px;
-      animation: fadeUp 0.35s var(--ease) both;
-    }
-    .adv-panel.open { display: flex; }
-    .adv-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .adv-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px; }
-    .stats { margin-left: auto; font-size: 11px; color: var(--muted); }
-
-    main { max-width: 1400px; margin: 0 auto; padding: 18px 16px 90px; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(345px, 1fr));
-      gap: 16px;
-    }
-    .card {
-      position: relative; overflow: hidden;
-      background: var(--glass-bg);
-      backdrop-filter: blur(26px) saturate(185%) contrast(105%);
-      -webkit-backdrop-filter: blur(26px) saturate(185%) contrast(105%);
-      border: 1px solid var(--border);
-      border-radius: 26px;
-      box-shadow:
-        var(--shadow),
-        inset 0 1px 0.5px var(--rim-top),
-        inset 1px 0 0.5px var(--rim-left),
-        inset 0 -1px 0.5px var(--rim-bottom);
-      padding: 20px;
-      display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
-      opacity: 0;
-      animation: cardIn 0.55s var(--ease) forwards;
-      transition: transform 0.35s var(--ease), border-color 0.25s, background 0.25s, box-shadow 0.35s;
-    }
-    .card.profitable {
-      border-color: var(--profit-border);
-      box-shadow: var(--shadow), var(--profit-glow);
-    }
-    .card::before {
-      content: ""; position: absolute; inset: 0; pointer-events: none;
-      background: radial-gradient(320px circle at var(--mx, -200px) var(--my, -200px), var(--spotlight), transparent 60%);
-      opacity: 0; transition: opacity 0.3s ease;
-    }
-    .card:hover::before { opacity: 1; }
-    .card:hover {
-      transform: translateY(-5px) scale(1.01);
-      border-color: var(--border-hover);
-      background: var(--glass-hover);
-    }
-    @keyframes cardIn {
-      from { opacity: 0; transform: translateY(20px) scale(0.96); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    .card-top {
-      display: flex; justify-content: space-between; align-items: center; gap: 8px;
-      font-size: 10px; color: var(--muted); position: relative; z-index: 1;
-    }
-    .card-top-left { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .badge {
-      border: 1px solid var(--border); border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
-      padding: 3px 9px; font-size: 9px; letter-spacing: 0.05em;
-      text-transform: uppercase; color: var(--text-soft);
-    }
-    .badge-profit {
-      background: var(--accent); color: var(--accent-inv);
-      border-color: var(--accent); font-weight: 600;
-    }
-    .online-dot {
-      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-      background: var(--text); margin-right: 4px; vertical-align: middle;
-      box-shadow: 0 0 8px var(--text);
-      animation: pulse 2.2s ease-in-out infinite;
-    }
-    .fav-btn {
-      height: auto;
-      background: transparent; border: none; box-shadow: none; backdrop-filter: none;
-      padding: 2px 6px; font-size: 15px; color: var(--muted);
-    }
-    .fav-btn:hover { color: var(--text); background: rgba(255,255,255,0.1); transform: scale(1.15); }
-    .fav-btn.saved { color: var(--text); }
-
-    .card-title {
-      position: relative; z-index: 1;
-      font-size: 12px; line-height: 1.55; font-weight: 300; color: var(--text);
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-      overflow: hidden; cursor: pointer;
-    }
-    .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; position: relative; z-index: 1; }
-    .tag {
-      font-size: 9.5px; color: var(--text-soft);
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border);
-      border-radius: 999px; padding: 3px 8px;
-    }
-    .card-foot {
-      position: relative; z-index: 1;
-      border-top: 1px solid var(--border); padding-top: 12px;
-      display: flex; justify-content: space-between; align-items: flex-end; gap: 10px;
-    }
-    .price { font-size: 15px; font-weight: 500; color: var(--text); }
-    .est-price { font-size: 9.5px; color: var(--text-soft); margin-top: 2px; }
-    .seller { font-size: 10px; color: var(--muted); margin-top: 3px; }
-    .card-btns { display: flex; gap: 6px; }
-    .card-btns a, .card-btns button {
-      height: 30px;
-      display: inline-flex; align-items: center; justify-content: center;
-      font-size: 10.5px; padding: 0 11px; text-decoration: none;
-      color: var(--text); border: 1px solid var(--border);
-      border-radius: 999px; background: rgba(255, 255, 255, 0.06);
-    }
-    .card-btns a:hover, .card-btns button:hover {
-      border-color: var(--border-hover); background: rgba(255, 255, 255, 0.15);
-    }
-
-    .grid.list-view { display: flex; flex-direction: column; gap: 10px; }
-    .grid.list-view .card { flex-direction: row; align-items: center; padding: 13px 20px; border-radius: 20px; }
-    .grid.list-view .card-main { flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; }
-    .grid.list-view .card-top { min-width: 110px; }
-    .grid.list-view .card-title { -webkit-line-clamp: 1; flex: 1; margin-top: 0 !important; }
-    .grid.list-view .tags { margin-top: 0; max-width: 220px; }
-    .grid.list-view .card-foot { border-top: none; padding-top: 0; min-width: 310px; justify-content: flex-end; align-items: center; gap: 14px; }
-
-    .load-more-wrap {
-      grid-column: 1 / -1;
-      display: flex; justify-content: center; padding-top: 12px;
-    }
-    .load-more-btn {
-      height: 42px; padding: 0 28px; font-size: 11.5px;
-    }
-
-    .skeleton {
-      height: 186px; border-radius: 26px;
-      background: linear-gradient(110deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.03) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s ease-in-out infinite;
-      border: 1px solid var(--border);
-      backdrop-filter: blur(20px);
-    }
-    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-    .toast-stack {
-      position: fixed; bottom: 20px; right: 20px; z-index: 60;
-      display: flex; flex-direction: column; gap: 10px; max-width: 360px; width: calc(100% - 40px);
-      pointer-events: none;
-    }
-    .toast {
-      pointer-events: auto;
-      background: var(--glass-strong);
-      backdrop-filter: blur(34px) saturate(190%);
-      -webkit-backdrop-filter: blur(34px) saturate(190%);
-      border: 1px solid var(--border-hover);
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0.5px var(--rim-top);
-      border-radius: 22px; padding: 14px 16px;
-      display: flex; flex-direction: column; gap: 8px;
-      animation: toastIn 0.45s var(--ease) both;
-    }
-    @keyframes toastIn {
-      from { opacity: 0; transform: translateY(20px) scale(0.94); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    .toast-head { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--muted); }
-    .toast-title { font-size: 11px; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .toast-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    .toast-foot a {
-      text-decoration: none; font-size: 10px; padding: 6px 12px; border-radius: 999px;
-      background: var(--accent); color: var(--accent-inv); font-weight: 500;
-    }
-
-    .overlay {
-      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.42);
-      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
-    }
-    .overlay.open { opacity: 1; pointer-events: auto; }
-
-    .modal {
-      position: fixed; top: 50%; left: 50%; width: 92%; max-width: 500px;
-      background: var(--glass-strong);
-      backdrop-filter: blur(38px) saturate(190%);
-      -webkit-backdrop-filter: blur(38px) saturate(190%);
-      border: 1px solid var(--border-hover);
-      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0.5px var(--rim-top);
-      border-radius: 28px; padding: 24px; z-index: 50;
-      opacity: 0; pointer-events: none;
-      transform: translate(-50%, -46%) scale(0.92);
-      transition: opacity 0.3s ease, transform 0.4s var(--ease);
-    }
-    .modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
-    .modal h3 { font-weight: 500; font-size: 14px; margin-bottom: 10px; }
-    .modal p { font-size: 11.5px; color: var(--text-soft); line-height: 1.6; margin-bottom: 16px; }
-    .modal input { width: 100%; margin-bottom: 14px; }
-
-    .drawer {
-      position: fixed; top: 14px; right: 14px; bottom: 14px;
-      width: calc(100% - 28px); max-width: 430px;
-      background: var(--glass-strong);
-      backdrop-filter: blur(38px) saturate(190%);
-      -webkit-backdrop-filter: blur(38px) saturate(190%);
-      border: 1px solid var(--border-hover);
-      border-radius: 28px;
-      box-shadow: -20px 0 65px rgba(0, 0, 0, 0.5), inset 0 1px 0.5px var(--rim-top);
-      z-index: 50; display: flex; flex-direction: column; overflow: hidden;
-      transform: translateX(calc(100% + 28px));
-      transition: transform 0.45s var(--ease);
-    }
-    .drawer.open { transform: translateX(0); }
-    .drawer-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-    .drawer-body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
-    .chat-list-item {
-      background: var(--glass-bg); border: 1px solid var(--border);
-      border-radius: 18px; padding: 12px 14px; cursor: pointer;
-      transition: transform 0.25s var(--ease), border-color 0.2s, background 0.2s;
-    }
-    .chat-list-item:hover { border-color: var(--border-hover); background: var(--glass-hover); transform: translateX(-3px); }
-    .msg {
-      max-width: 85%; padding: 10px 14px;
-      background: var(--glass-bg); border: 1px solid var(--border);
-      border-radius: 18px; font-size: 11.5px; line-height: 1.5; white-space: pre-wrap;
-    }
-    .msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-inv); border-color: var(--accent); }
-    .msg-meta { font-size: 9px; opacity: 0.65; margin-top: 5px; }
-    .quick-replies { padding: 8px 20px 0; display: flex; gap: 6px; flex-wrap: wrap; }
-    .quick-replies button { height: 28px; font-size: 10px; padding: 0 10px; color: var(--text-soft); }
-    .drawer-foot { padding: 12px 18px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
-    .drawer-foot input { flex: 1; }
-    .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
-
-    @media (max-width: 820px) {
-      header { border-radius: 22px; flex-wrap: wrap; }
-      .grid.list-view .card { flex-direction: column; align-items: stretch; }
-      .grid.list-view .card-main { flex-direction: column; align-items: flex-start; }
-      .grid.list-view .card-foot { min-width: 0; justify-content: space-between; }
-    }
-  </style>
-</head>
-<body>
-  <div class="wallpaper">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-  </div>
-  <canvas id="bgCanvas"></canvas>
-
-  <header class="liquid">
-    <div class="brand"><span class="dot"></span> FP // PARSER</div>
-    <div class="actions">
-      <select id="currencySelect" onchange="setCurrency(this.value)">
-        <option value="RUB">₽ RUB</option>
-        <option value="USD">$ USD</option>
-        <option value="KZT">₸ KZT</option>
-      </select>
-      <button id="langBtn" class="icon-btn" onclick="toggleLang()">RU</button>
-      <button onclick="loadLots(true)"><span id="refreshIcon">↻</span> <span data-i18n="refresh">Обновить</span></button>
-      <button onclick="openChatsDrawer()" data-i18n="chats">Чаты</button>
-      <button id="authBtn" class="primary" onclick="openAuthModal()" data-i18n="login">Войти в FunPay</button>
-      <button class="icon-btn" onclick="toggleTheme()" title="Theme">◐</button>
-    </div>
-  </header>
-
-  <div class="toolbar-wrap">
-    <div class="toolbar-row">
-      <div class="tabs liquid">
-        <button class="tab active" data-game="all" onclick="setGame('all', this)" data-i18n="all">Все</button>
-        <button class="tab" data-game="dota2" onclick="setGame('dota2', this)">Dota 2</button>
-        <button class="tab" data-game="valorant" onclick="setGame('valorant', this)">Valorant</button>
-        <button class="tab" data-game="fav" onclick="setGame('fav', this)" data-i18n="fav">★ Избр.</button>
-      </div>
-
-      <input class="search-input" id="searchInput" data-i18n-ph="searchPh" placeholder="Поиск: MMR, аркана, Vandal..." oninput="renderLots()" />
-
-      <button id="profitOnlyBtn" onclick="toggleProfitOnly()">⚡ <span data-i18n="profitOnly">Выгодные</span></button>
-      <button id="advToggleBtn" onclick="toggleAdvPanel()">⚙ <span data-i18n="filters">Фильтры</span></button>
-
-      <select id="sortSelect" onchange="renderLots()">
-        <option value="default" data-i18n="sortDefault">По умолчанию</option>
-        <option value="profit" data-i18n="sortProfit">Сначала выгоднее</option>
-        <option value="asc" data-i18n="sortAsc">Сначала дешевле</option>
-        <option value="desc" data-i18n="sortDesc">Сначала дороже</option>
-        <option value="reviews" data-i18n="sortReviews">Больше отзывов</option>
-        <option value="mmr" data-i18n="sortMmr">Больше MMR</option>
-      </select>
-
-      <div class="tabs liquid">
-        <button class="tab active" id="viewGridBtn" onclick="setView('grid')">⊞</button>
-        <button class="tab" id="viewListBtn" onclick="setView('list')">☰</button>
-      </div>
-
-      <div class="stats" id="statsText">—</div>
-    </div>
-
-    <div class="adv-panel liquid" id="advPanel">
-      <div class="adv-row">
-        <span class="adv-label" data-i18n="priceLbl">Цена:</span>
-        <input id="minPrice" type="number" placeholder="От" style="width:95px" oninput="renderLots()" />
-        <input id="maxPrice" type="number" placeholder="До" style="width:95px" oninput="renderLots()" />
-
-        <span class="adv-label" style="margin-left:8px;" data-i18n="mmrLbl">MMR:</span>
-        <input id="minMmr" type="number" placeholder="От" style="width:95px" oninput="renderLots()" />
-        <input id="maxMmr" type="number" placeholder="До" style="width:95px" oninput="renderLots()" />
-
-        <span class="adv-label" style="margin-left:8px;" data-i18n="reviewsLbl">Отзывы:</span>
-        <select id="minReviews" onchange="renderLots()">
-          <option value="0">0+</option>
-          <option value="10">10+</option>
-          <option value="50">50+</option>
-          <option value="100">100+</option>
-          <option value="500">500+</option>
-        </select>
-
-        <input id="excludeInput" style="flex:1; min-width:190px;" data-i18n-ph="excludePh" placeholder="Минус-слова: аренда, буст, привязка..." oninput="renderLots()" />
-      </div>
-
-      <div class="adv-row">
-        <button id="fOnline" onclick="toggleQuickFilter('online', this)" data-i18n="online">Онлайн</button>
-        <button id="fNoRent" class="pill-active" onclick="toggleQuickFilter('noRent', this)" data-i18n="noRent">Без аренды / буста</button>
-        <button id="fNative" onclick="toggleQuickFilter('native', this)" data-i18n="nativeMail">Родная почта</button>
-        <button id="fAuto" onclick="toggleQuickFilter('auto', this)" data-i18n="autoDelivery">Автовыдача</button>
-        <button id="fSkins" onclick="toggleQuickFilter('skins', this)" data-i18n="skinsFilter">Аркана / Нож / Скины</button>
-        <button id="fHighBeh" onclick="toggleQuickFilter('highBeh', this)" data-i18n="highBeh">Порядочность 10k+</button>
-        <button onclick="resetFilters()" style="margin-left:auto;" data-i18n="reset">Сбросить</button>
-      </div>
-    </div>
-  </div>
-
-  <main>
-    <div id="lotsContainer" class="grid"></div>
-  </main>
-
-  <div class="toast-stack" id="toastStack"></div>
-
-  <div class="overlay" id="overlay" onclick="closeAll()"></div>
-
-  <div class="modal" id="detailModal">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-      <span id="detailBadge" class="badge"></span>
-      <button onclick="closeAll()" style="height:28px; padding:0 10px; border:none; background:transparent; box-shadow:none;">✕</button>
-    </div>
-    <p id="detailDesc" style="color:var(--text); white-space:pre-wrap; max-height:260px; overflow-y:auto;"></p>
-    <div id="detailTags" class="tags" style="margin-bottom:16px;"></div>
-    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:14px;">
-      <div>
-        <div id="detailPrice" class="price"></div>
-        <div id="detailEst" class="est-price"></div>
-        <div id="detailSeller" class="seller"></div>
-      </div>
-      <div style="display:flex; gap:8px;">
-        <a id="detailLink" href="#" target="_blank" rel="noopener" style="text-decoration:none;">
-          <button>FunPay ↗</button>
-        </a>
-        <button id="detailChatBtn" class="primary" data-i18n="write">Написать</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="authModal">
-    <h3 data-i18n="authTitle">Авторизация FunPay</h3>
-    <p data-i18n="authDesc">Вставь свой golden_key из cookies сайта FunPay. Ключ хранится только в твоем браузере и нужен для синхронизации твоих чатов.</p>
-    <input id="goldenKeyInput" type="password" data-i18n-ph="keyPh" placeholder="Вставь golden_key..." />
-    <div style="display:flex; gap:8px; justify-content:flex-end;">
-      <button onclick="logout()" id="logoutBtn" style="display:none;" data-i18n="logout">Выйти</button>
-      <button onclick="closeAll()" data-i18n="cancel">Отмена</button>
-      <button class="primary" onclick="saveAuth()" data-i18n="connect">Подключить</button>
-    </div>
-    <div id="authError" style="color:#ff6b6b; font-size:11px; margin-top:10px;"></div>
-  </div>
-
-  <div class="drawer" id="chatDrawer">
-    <div class="drawer-head">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <button id="backToChatsBtn" style="display:none; height:28px; padding:0 10px;" onclick="showChatList()">←</button>
-        <span id="drawerTitle" style="font-size:12px;">ЧАТЫ FUNPAY</span>
-      </div>
-      <button onclick="closeAll()" style="height:28px; padding:0 10px; border:none; background:transparent; box-shadow:none;">✕</button>
-    </div>
-    <div class="drawer-body" id="drawerBody"></div>
-    <div id="quickReplies" class="quick-replies" style="display:none;"></div>
-    <div class="drawer-foot" id="drawerFoot" style="display:none;">
-      <input id="msgInput" data-i18n-ph="msgPh" placeholder="Написать продавцу..." onkeydown="if(event.key==='Enter') sendMessage()" />
-      <button class="primary" onclick="sendMessage()">→</button>
-    </div>
-  </div>
-
-  <script>
-    /* ================= I18N & CURRENCY ================= */
-    const I18N = {
-      ru: {
-        refresh: "Обновить", chats: "Чаты", login: "Войти", all: "Все", fav: "★ Избр.",
-        searchPh: "Поиск: MMR, аркана, Vandal...", profitOnly: "Выгодные", filters: "Фильтры",
-        sortDefault: "По умолчанию", sortProfit: "Сначала выгоднее", sortAsc: "Дешевле",
-        sortDesc: "Дороже", sortReviews: "По отзывам", sortMmr: "По MMR",
-        priceLbl: "Цена:", mmrLbl: "MMR:", reviewsLbl: "Отзывы:",
-        excludePh: "Минус-слова: аренда, буст, привязка...",
-        online: "Онлайн", offline: "Офлайн", noRent: "Без аренды / буста",
-        nativeMail: "Родная почта", autoDelivery: "Автовыдача", skinsFilter: "Аркана / Нож / Скины",
-        highBeh: "Порядочность 10k+", reset: "Сбросить",
-        chatBtn: "Чат", write: "Написать", profitTag: "ВЫГОДА", estMarket: "Рынок ~",
-        pcs: "шт.", loadMore: "Показать ещё (+100)", left: "осталось",
-        newLotToast: "НОВЫЙ ЛОТ", goToLot: "Перейти на лот ↗",
-        authTitle: "Авторизация FunPay",
-        authDesc: "Вставь свой golden_key из cookies FunPay. Он хранится только в браузере и нужен для чатов.",
-        keyPh: "Вставь golden_key...", logout: "Выйти", cancel: "Отмена", connect: "Подключить",
-        checkingKey: "Проверка...", authErr: "Ошибка входа", chatsTitle: "ЧАТЫ FUNPAY",
-        syncing: "Синхронизация...", noChats: "Диалогов пока нет.",
-        noLots: "По этим фильтрам лотов нет.", serverErr: "Ошибка связи с сервером.",
-        firstMsg: "Напиши первое сообщение продавцу.", msgPh: "Написать продавцу...",
-        noSellerId: "Не удалось определить ID продавца. Открой лот на FunPay.",
-        quick: [
-          { label: "Актуально?", text: "Привет! Аккаунт ещё актуален?" },
-          { label: "Родная почта?", text: "Родная почта и чеки есть?" },
-          { label: "Готов купить", text: "Готов забрать прямо сейчас." }
-        ]
-      },
-      en: {
-        refresh: "Refresh", chats: "Chats", login: "Sign in", all: "All", fav: "★ Fav",
-        searchPh: "Search: MMR, Arcana, Vandal...", profitOnly: "Underpriced", filters: "Filters",
-        sortDefault: "Default", sortProfit: "Best profit", sortAsc: "Cheapest",
-        sortDesc: "Expensive", sortReviews: "Top reviews", sortMmr: "Highest MMR",
-        priceLbl: "Price:", mmrLbl: "MMR:", reviewsLbl: "Reviews:",
-        excludePh: "Exclude: rent, boost, link...",
-        online: "Online", offline: "Offline", noRent: "No rent / boost",
-        nativeMail: "Original email", autoDelivery: "Auto-delivery", skinsFilter: "Arcana / Knife / Skins",
-        highBeh: "10k+ Behavior", reset: "Reset",
-        chatBtn: "Chat", write: "Message", profitTag: "PROFIT", estMarket: "Market ~",
-        pcs: "lots", loadMore: "Load more (+100)", left: "left",
-        newLotToast: "NEW LOT", goToLot: "Open lot ↗",
-        authTitle: "FunPay Auth",
-        authDesc: "Paste your golden_key from FunPay cookies. Stored locally in your browser for chat sync.",
-        keyPh: "Paste golden_key...", logout: "Log out", cancel: "Cancel", connect: "Connect",
-        checkingKey: "Checking...", authErr: "Login error", chatsTitle: "FUNPAY CHATS",
-        syncing: "Syncing...", noChats: "No chats yet.",
-        noLots: "No lots match these filters.", serverErr: "Server connection error.",
-        firstMsg: "Send the first message to the seller.", msgPh: "Message seller...",
-        noSellerId: "Seller ID not found. Open the listing on FunPay.",
-        quick: [
-          { label: "Available?", text: "Hi! Is this account still available?" },
-          { label: "Original email?", text: "Does it come with original email?" },
-          { label: "Ready to buy", text: "I'm ready to buy right now." }
-        ]
-      }
-    };
-
-    let currentLang = localStorage.getItem("fp_lang") || "ru";
-    let currentCurrency = localStorage.getItem("fp_curr") || "RUB";
-    let exchangeRates = { RUB: 1.0, USD: 0.0105, KZT: 5.2 };
-
-    function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) || key; }
-
-    function formatPrice(rubAmount) {
-      const rate = exchangeRates[currentCurrency] || 1;
-      const val = rubAmount * rate;
-      if (currentCurrency === "USD") return `$${val.toFixed(2)}`;
-      if (currentCurrency === "KZT") return `${Math.round(val).toLocaleString("ru-RU")} ₸`;
-      return `${val < 10 ? val.toFixed(2) : Math.round(val).toLocaleString("ru-RU")} ₽`;
-    }
-
-    function applyLang() {
-      document.documentElement.lang = currentLang;
-      document.getElementById("langBtn").textContent = currentLang.toUpperCase();
-      document.querySelectorAll("[data-i18n]").forEach(el => {
-        const key = el.getAttribute("data-i18n");
-        if (el.id === "authBtn" && currentUser) return;
-        el.textContent = t(key);
-      });
-      document.querySelectorAll("[data-i18n-ph]").forEach(el => {
-        el.placeholder = t(el.getAttribute("data-i18n-ph"));
-      });
-      document.getElementById("quickReplies").innerHTML = t("quick").map(q =>
-        `<button onclick="useTemplate('${escapeJs(q.text)}')">${escapeHtml(q.label)}</button>`
-      ).join("");
-      if (!activeNodeId) document.getElementById("drawerTitle").textContent = t("chatsTitle");
-    }
-
-    function toggleLang() {
-      currentLang = currentLang === "ru" ? "en" : "ru";
-      localStorage.setItem("fp_lang", currentLang);
-      applyLang();
-      renderLots(false);
-    }
-
-    function setCurrency(curr) {
-      currentCurrency = curr;
-      localStorage.setItem("fp_curr", curr);
-      renderLots(false);
-    }
-
-    /* ================= РЕАЛЬНАЯ РЫНОЧНАЯ МЕДИАНА ================= */
-    function getMedian(arr) {
-      if (!arr.length) return 0;
-      const s = [...arr].sort((a, b) => a - b);
-      const mid = Math.floor(s.length / 2);
-      return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-    }
-
-    function processLotsWithMarket(rawLots) {
-      const parsed = rawLots.map(l => {
-        const text = (l.description + " " + (l.tags || []).join(" ")).toLowerCase();
-        const reviewsNum = parseInt(String(l.reviews || "0").replace(/\D/g, ""), 10) || 0;
-        const isRentOrBoost = /аренд|rent|буст|boost|привязк|калибровк|отмыв|часы|часов\s*в\s*аренд/i.test(text);
-
-        let mmr = 0;
-        if (l.game === "dota2") {
-          const m1 = text.match(/(\d{4,5})\s*(?:mmr|ммр|рейтинг|птс|pts)/i);
-          const m2 = text.match(/(?:mmr|ммр|рейтинг)\s*[:\-]?\s*(\d{4,5})/i);
-          if (m1) mmr = parseInt(m1[1], 10);
-          else if (m2) mmr = parseInt(m2[1], 10);
-          if (mmr > 16000) mmr = 0;
-        }
-
-        let bucket = null;
-        if (!isRentOrBoost && l.price >= 80) {
-          if (l.game === "dota2") {
-            if (mmr >= 1000) {
-              const step = Math.min(Math.floor(mmr / 1000), 8);
-              bucket = `dota_${step}k`;
-            } else if (/аркан|arcana/i.test(text)) {
-              bucket = "dota_arcana";
-            } else {
-              bucket = "dota_base";
-            }
-          } else if (l.game === "valorant") {
-            const skinsMatch = text.match(/(\d{1,3})\s*(?:скин|skin)/i);
-            const skinsCnt = skinsMatch ? parseInt(skinsMatch[1], 10) : 0;
-
-            if (/radiant|радиант/i.test(text)) bucket = "val_radiant";
-            else if (/immortal|иммортал/i.test(text)) bucket = "val_immortal";
-            else if (/ascendant|расцвет/i.test(text)) bucket = "val_ascendant";
-            else if (/diamond|алмаз/i.test(text)) bucket = "val_diamond";
-            else if (skinsCnt >= 40) bucket = "val_skins_40+";
-            else if (skinsCnt >= 15) bucket = "val_skins_15+";
-            else if (/нож|knife|керамбит|бабочк/i.test(text)) bucket = "val_knife";
-            else bucket = "val_base";
-          }
-        }
-
-        return { ...l, _text: text, _reviews: reviewsNum, _mmr: mmr, _isRent: isRentOrBoost, _bucket: bucket };
-      });
-
-      const bucketPrices = {};
-      parsed.forEach(l => {
-        if (!l._bucket) return;
-        if (!bucketPrices[l._bucket]) bucketPrices[l._bucket] = [];
-        bucketPrices[l._bucket].push(l.price);
-      });
-
-      const bucketStats = {};
-      Object.keys(bucketPrices).forEach(b => {
-        const prices = bucketPrices[b];
-        if (prices.length >= 3) {
-          bucketStats[b] = {
-            median: Math.round(getMedian(prices)),
-            count: prices.length,
-          };
-        }
-      });
-
-      return parsed.map(l => {
-        const stat = l._bucket ? bucketStats[l._bucket] : null;
-        let isProfitable = false;
-        let profitPct = 0;
-        let marketRub = 0;
-        let marketCount = 0;
-
-        if (stat && l.price >= 80 && stat.median > l.price) {
-          const ratio = (stat.median - l.price) / l.price;
-          marketRub = stat.median;
-          marketCount = stat.count;
-          if (ratio >= 0.25) {
-            isProfitable = true;
-            profitPct = Math.min(Math.round(ratio * 100), 300);
-          }
-        }
-
-        return {
-          ...l,
-          _estRub: marketRub,
-          _marketCount: marketCount,
-          _isProfitable: isProfitable,
-          _profitPct: profitPct,
-        };
-      });
-    }
-
-    /* ================= ЖИВЫЕ УВЕДОМЛЕНИЯ ================= */
-    let seenLotIds = new Set();
-    let isFirstLoad = true;
-
-    function showToast(lot) {
-      const stack = document.getElementById("toastStack");
-      const el = document.createElement("div");
-      el.className = "toast";
-      el.innerHTML = `
-        <div class="toast-head">
-          <span>${t("newLotToast")} · ${lot.game_name} ${lot._isProfitable ? `· ⚡ +${lot._profitPct}%` : ''}</span>
-          <button onclick="this.closest('.toast').remove()" style="height:auto; padding:2px 6px; border:none; background:transparent; box-shadow:none;">✕</button>
-        </div>
-        <div class="toast-title">${escapeHtml(lot.description)}</div>
-        <div class="toast-foot">
-          <strong>${escapeHtml(formatPrice(lot.price))}</strong>
-          <a href="${lot.url}" target="_blank" rel="noopener">${t("goToLot")}</a>
-        </div>
-      `;
-      stack.prepend(el);
-      if (stack.children.length > 4) stack.lastElementChild.remove();
-      setTimeout(() => { if (el.parentNode) el.remove(); }, 11000);
-    }
-
-    /* ================= BACKGROUND PARTICLES ================= */
-    const canvas = document.getElementById("bgCanvas");
-    const ctx = canvas.getContext("2d");
-    let particles = [];
-    let mouse = { x: -999, y: -999 };
-
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      const count = Math.min(45, Math.floor((canvas.width * canvas.height) / 30000));
-      particles = Array.from({ length: count }, () => ({
-        x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-        vx: (Math.random() - 0.5) * 0.22, vy: (Math.random() - 0.5) * 0.22,
-        r: Math.random() * 1.3 + 0.5,
-      }));
-    }
-    window.addEventListener("resize", resizeCanvas);
-    window.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-    resizeCanvas();
-
-    function animateBg() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const isLight = document.body.classList.contains("light");
-      const rgb = isLight ? "20, 24, 32" : "245, 248, 255";
-
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${rgb}, 0.24)`; ctx.fill();
-
-        const dm = Math.hypot(p.x - mouse.x, p.y - mouse.y);
-        if (dm < 140) {
-          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(mouse.x, mouse.y);
-          ctx.strokeStyle = `rgba(${rgb}, ${(1 - dm / 140) * 0.14})`;
-          ctx.lineWidth = 0.7; ctx.stroke();
-        }
-      }
-      requestAnimationFrame(animateBg);
-    }
-    animateBg();
-
-    document.addEventListener("mousemove", e => {
-      const card = e.target.closest(".card");
-      if (!card) return;
-      const rect = card.getBoundingClientRect();
-      card.style.setProperty("--mx", `${e.clientX - rect.left}px`);
-      card.style.setProperty("--my", `${e.clientY - rect.top}px`);
-    });
-
-    /* ================= STATE & FILTERS ================= */
-    let allLots = [];
-    let visibleLimit = 100;
-    let currentGame = "all";
-    let profitOnly = false;
-    let quickFilters = { online: false, noRent: true, native: false, auto: false, skins: false, highBeh: false };
-    let fpKey = localStorage.getItem("fp_golden_key") || "";
-    let favIds = JSON.parse(localStorage.getItem("fp_favs") || "[]");
-    let currentUser = null;
-    let activeNodeId = null;
-    let pollTimer = null;
-
-    if (localStorage.getItem("fp_theme") === "light") document.body.classList.add("light");
-    document.getElementById("currencySelect").value = currentCurrency;
-
-    function toggleTheme() {
-      document.body.classList.toggle("light");
-      localStorage.setItem("fp_theme", document.body.classList.contains("light") ? "light" : "dark");
-    }
-
-    function toggleAdvPanel() {
-      document.getElementById("advPanel").classList.toggle("open");
-      document.getElementById("advToggleBtn").classList.toggle("pill-active");
-    }
-
-    function toggleProfitOnly() {
-      profitOnly = !profitOnly;
-      document.getElementById("profitOnlyBtn").classList.toggle("pill-active", profitOnly);
-      renderLots();
-    }
-
-    function toggleQuickFilter(key, btn) {
-      quickFilters[key] = !quickFilters[key];
-      btn.classList.toggle("pill-active", quickFilters[key]);
-      renderLots();
-    }
-
-    function resetFilters() {
-      document.getElementById("searchInput").value = "";
-      document.getElementById("minPrice").value = "";
-      document.getElementById("maxPrice").value = "";
-      document.getElementById("minMmr").value = "";
-      document.getElementById("maxMmr").value = "";
-      document.getElementById("minReviews").value = "0";
-      document.getElementById("excludeInput").value = "";
-      document.getElementById("sortSelect").value = "default";
-      profitOnly = false;
-      document.getElementById("profitOnlyBtn").classList.remove("pill-active");
-      quickFilters = { online: false, noRent: true, native: false, auto: false, skins: false, highBeh: false };
-      document.querySelectorAll("#advPanel button[id^='f']").forEach(b => b.classList.remove("pill-active"));
-      document.getElementById("fNoRent").classList.add("pill-active");
-      renderLots();
-    }
-
-    function setView(mode) {
-      const el = document.getElementById("lotsContainer");
-      el.classList.toggle("list-view", mode === "list");
-      document.getElementById("viewGridBtn").classList.toggle("active", mode === "grid");
-      document.getElementById("viewListBtn").classList.toggle("active", mode === "list");
-    }
-
-    function loadMore() {
-      visibleLimit += 100;
-      renderLots(false);
-    }
-
-    async function loadLots(force = false, silent = false) {
-      const container = document.getElementById("lotsContainer");
-      const icon = document.getElementById("refreshIcon");
-      if (!silent) {
-        icon.classList.add("spin");
-        if (!allLots.length) container.innerHTML = Array(8).fill('<div class="skeleton"></div>').join("");
-      }
-      try {
-        const res = await fetch(`/api/lots?force=${force}`);
-        const data = await res.json();
-        if (data.rates) exchangeRates = data.rates;
-
-        const enriched = processLotsWithMarket(data.lots || []);
-
-        if (!isFirstLoad) {
-          const fresh = enriched.filter(l => !seenLotIds.has(l.id));
-          fresh.sort((a, b) => b._profitPct - a._profitPct).slice(0, 2).forEach(showToast);
-        }
-        enriched.forEach(l => seenLotIds.add(l.id));
-        isFirstLoad = false;
-
-        allLots = enriched;
-        renderLots(!silent);
-      } catch (e) {
-        if (!silent) container.innerHTML = `<div class="empty">${t("serverErr")}</div>`;
-      } finally {
-        icon.classList.remove("spin");
-      }
-    }
-
-    function setGame(game, btn) {
-      currentGame = game;
-      btn.parentElement.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      renderLots();
-    }
-
-    function toggleFav(id, e) {
-      e.stopPropagation();
-      if (favIds.includes(id)) favIds = favIds.filter(x => x !== id);
-      else favIds.push(id);
-      localStorage.setItem("fp_favs", JSON.stringify(favIds));
-      renderLots(false);
-    }
-
-    function openDetail(lotId) {
-      const l = allLots.find(x => x.id === lotId);
-      if (!l) return;
-      document.getElementById("detailBadge").textContent = `${l.game_name} · ${(l.online ? t("online") : t("offline")).toUpperCase()}`;
-      document.getElementById("detailDesc").textContent = l.description;
-      document.getElementById("detailTags").innerHTML = l.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
-      document.getElementById("detailPrice").textContent = formatPrice(l.price);
-      document.getElementById("detailEst").textContent = l._isProfitable
-        ? `⚡ ${t("profitTag")} +${l._profitPct}% (${t("estMarket")} ${formatPrice(l._estRub)}, ${l._marketCount} ${t("pcs")})`
-        : "";
-      document.getElementById("detailSeller").textContent = `${l.seller} · ★ ${l.reviews}`;
-      document.getElementById("detailLink").href = l.url;
-      document.getElementById("detailChatBtn").onclick = () => {
-        closeAll();
-        setTimeout(() => openSellerChat(l.seller_id, l.seller), 180);
-      };
-      document.getElementById("overlay").classList.add("open");
-      document.getElementById("detailModal").classList.add("open");
-    }
-
-    function renderLots(resetLimit = true) {
-      if (resetLimit) visibleLimit = 100;
-
-      const q = document.getElementById("searchInput").value.toLowerCase().trim();
-      const minP = parseFloat(document.getElementById("minPrice").value);
-      const maxP = parseFloat(document.getElementById("maxPrice").value);
-      const minMmr = parseInt(document.getElementById("minMmr").value, 10);
-      const maxMmr = parseInt(document.getElementById("maxMmr").value, 10);
-      const minRev = parseInt(document.getElementById("minReviews").value, 10) || 0;
-      const excl = document.getElementById("excludeInput").value.toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
-      const sort = document.getElementById("sortSelect").value;
-      const rate = exchangeRates[currentCurrency] || 1;
-
-      let filtered = allLots.filter(l => {
-        if (currentGame === "fav" && !favIds.includes(l.id)) return false;
-        if (currentGame !== "all" && currentGame !== "fav" && l.game !== currentGame) return false;
-        if (profitOnly && !l._isProfitable) return false;
-        if (quickFilters.online && !l.online) return false;
-        if (quickFilters.noRent && l._isRent) return false;
-        if (quickFilters.native && !/родн\w*\s*почт|перв\w*\s*письм|native/i.test(l._text)) return false;
-        if (quickFilters.auto && !/автовыдач|моментальн|auto/i.test(l._text)) return false;
-        if (quickFilters.skins && !/аркан|arcana|нож|knife|vandal|phantom|скин|skin/i.test(l._text)) return false;
-        if (quickFilters.highBeh && !/10\s*000|10k|11\s*000|12\s*000|10000|11000|12000/i.test(l._text)) return false;
-        if (l._reviews < minRev) return false;
-
-        const convPrice = l.price * rate;
-        if (!isNaN(minP) && convPrice < minP) return false;
-        if (!isNaN(maxP) && convPrice > maxP) return false;
-        if (!isNaN(minMmr) && l._mmr < minMmr) return false;
-        if (!isNaN(maxMmr) && (l._mmr === 0 || l._mmr > maxMmr)) return false;
-
-        if (excl.length && excl.some(w => l._text.includes(w))) return false;
-        if (q && !(l._text.includes(q) || l.seller.toLowerCase().includes(q))) return false;
-        return true;
-      });
-
-      if (sort === "profit") filtered.sort((a, b) => b._profitPct - a._profitPct);
-      if (sort === "asc") filtered.sort((a, b) => a.price - b.price);
-      if (sort === "desc") filtered.sort((a, b) => b.price - a.price);
-      if (sort === "reviews") filtered.sort((a, b) => b._reviews - a._reviews);
-      if (sort === "mmr") filtered.sort((a, b) => b._mmr - a._mmr);
-
-      const profitCount = filtered.filter(x => x._isProfitable).length;
-      document.getElementById("statsText").textContent = `${filtered.length} / ${allLots.length} · ⚡ ${profitCount}`;
-
-      const container = document.getElementById("lotsContainer");
-      if (!filtered.length) {
-        container.innerHTML = `<div class="empty">${t("noLots")}</div>`;
-        return;
-      }
-
-      const shown = filtered.slice(0, visibleLimit);
-      let html = shown.map((l, idx) => {
-        const isFav = favIds.includes(l.id);
-        const delay = Math.min((idx % 100) * 14, 280);
-        return `
-        <div class="card ${l._isProfitable ? 'profitable' : ''}" style="animation-delay:${delay}ms;">
-          <div class="card-main">
-            <div class="card-top">
-              <div class="card-top-left">
-                <span class="badge">${l.game_name}</span>
-                ${l._isProfitable ? `<span class="badge badge-profit">⚡ ${t("profitTag")} +${l._profitPct}%</span>` : ''}
-                <span>${l.online ? `<span class="online-dot"></span>${t("online")}` : t("offline")}</span>
-              </div>
-              <button class="fav-btn ${isFav ? 'saved' : ''}" onclick="toggleFav('${l.id}', event)">
-                ${isFav ? '★' : '☆'}
-              </button>
-            </div>
-            <div class="card-title" style="margin-top:8px;" onclick="openDetail('${l.id}')">${escapeHtml(l.description)}</div>
-            ${l.tags.length ? `<div class="tags">${l.tags.slice(0, 4).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>` : ''}
-          </div>
-          <div class="card-foot">
-            <div>
-              <div class="price">${escapeHtml(formatPrice(l.price))}</div>
-              ${l._isProfitable ? `<div class="est-price">${t("estMarket")} ${escapeHtml(formatPrice(l._estRub))} (${l._marketCount} ${t("pcs")})</div>` : ''}
-              <div class="seller">${escapeHtml(l.seller)} · ★ ${escapeHtml(l.reviews)}</div>
-            </div>
-            <div class="card-btns">
-              <a href="${l.url}" target="_blank" rel="noopener">FunPay ↗</a>
-              <button onclick="openSellerChat(${l.seller_id}, '${escapeJs(l.seller)}')">${t("chatBtn")}</button>
-            </div>
-          </div>
-        </div>`;
-      }).join("");
-
-      const remaining = filtered.length - shown.length;
-      if (remaining > 0) {
-        html += `
-        <div class="load-more-wrap">
-          <button class="load-more-btn" onclick="loadMore()">
-            ${t("loadMore")} · ${t("left")} ${remaining}
-          </button>
-        </div>`;
-      }
-
-      container.innerHTML = html;
-    }
-
-    /* ================= AUTH & CHATS ================= */
-    async function checkAuth() {
-      if (!fpKey) return;
-      try {
-        const res = await fetch("/api/auth", { headers: { "X-FunPay-Key": fpKey } });
-        if (!res.ok) throw new Error();
-        currentUser = await res.json();
-        document.getElementById("authBtn").textContent = `@${currentUser.username}`;
-        document.getElementById("logoutBtn").style.display = "inline-flex";
-      } catch {
-        currentUser = null;
-        document.getElementById("authBtn").textContent = t("login");
-      }
-    }
-
-    function openAuthModal() {
-      document.getElementById("goldenKeyInput").value = fpKey;
-      document.getElementById("authError").textContent = "";
-      document.getElementById("overlay").classList.add("open");
-      document.getElementById("authModal").classList.add("open");
-    }
-
-    async function saveAuth() {
-      const key = document.getElementById("goldenKeyInput").value.trim();
-      const errEl = document.getElementById("authError");
-      errEl.textContent = t("checkingKey");
-      try {
-        const res = await fetch("/api/auth", { headers: { "X-FunPay-Key": key } });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || t("authErr"));
-        fpKey = key;
-        localStorage.setItem("fp_golden_key", key);
-        currentUser = data;
-        document.getElementById("authBtn").textContent = `@${currentUser.username}`;
-        document.getElementById("logoutBtn").style.display = "inline-flex";
-        closeAll();
-      } catch (e) {
-        errEl.textContent = e.message;
-      }
-    }
-
-    function logout() {
-      fpKey = ""; currentUser = null;
-      localStorage.removeItem("fp_golden_key");
-      document.getElementById("authBtn").textContent = t("login");
-      document.getElementById("logoutBtn").style.display = "none";
-      closeAll();
-    }
-
-    function openChatsDrawer() {
-      if (!currentUser) return openAuthModal();
-      document.getElementById("overlay").classList.add("open");
-      document.getElementById("chatDrawer").classList.add("open");
-      showChatList();
-    }
-
-    async function showChatList() {
-      stopPolling();
-      activeNodeId = null;
-      document.getElementById("backToChatsBtn").style.display = "none";
-      document.getElementById("drawerFoot").style.display = "none";
-      document.getElementById("quickReplies").style.display = "none";
-      document.getElementById("drawerTitle").textContent = t("chatsTitle");
-      const body = document.getElementById("drawerBody");
-      body.innerHTML = `<div class="empty">${t("syncing")}</div>`;
-
-      const res = await fetch("/api/chats", { headers: { "X-FunPay-Key": fpKey } });
-      const data = await res.json();
-      if (!data.chats || !data.chats.length) {
-        body.innerHTML = `<div class="empty">${t("noChats")}</div>`;
-        return;
-      }
-      body.innerHTML = data.chats.map(c => `
-        <div class="chat-list-item" onclick="openChat('${c.node_id}', '${escapeJs(c.name)}')">
-          <div style="display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px;">
-            <strong style="font-weight:500;">${escapeHtml(c.name)} ${c.unread ? '●' : ''}</strong>
-            <span style="font-size:10px; color:var(--muted);">${escapeHtml(c.time)}</span>
-          </div>
-          <div style="font-size:10.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-            ${escapeHtml(c.last_message)}
-          </div>
-        </div>
-      `).join("");
-    }
-
-    function openSellerChat(sellerId, sellerName) {
-      if (!currentUser) return openAuthModal();
-      if (!sellerId) return alert(t("noSellerId"));
-      const ids = [currentUser.user_id, sellerId].sort((a, b) => a - b);
-      const node = `users-${ids[0]}-${ids[1]}`;
-      document.getElementById("overlay").classList.add("open");
-      document.getElementById("chatDrawer").classList.add("open");
-      openChat(node, sellerName);
-    }
-
-    async function openChat(nodeId, title) {
-      activeNodeId = nodeId;
-      document.getElementById("backToChatsBtn").style.display = "inline-flex";
-      document.getElementById("drawerFoot").style.display = "flex";
-      document.getElementById("quickReplies").style.display = "flex";
-      document.getElementById("drawerTitle").textContent = title;
-      await fetchMessages();
-      stopPolling();
-      pollTimer = setInterval(fetchMessages, 4000);
-    }
-
-    async function fetchMessages() {
-      if (!activeNodeId) return;
-      const res = await fetch(`/api/chats/${activeNodeId}`, { headers: { "X-FunPay-Key": fpKey } });
-      const data = await res.json();
-      if (data.node_id) activeNodeId = data.node_id;
-
-      const body = document.getElementById("drawerBody");
-      body.innerHTML = (data.messages || []).map(m => `
-        <div class="msg ${m.is_me ? 'me' : ''}">
-          <div>${escapeHtml(m.text)}</div>
-          <div class="msg-meta">${escapeHtml(m.author)} · ${escapeHtml(m.time)}</div>
-        </div>
-      `).join("") || `<div class="empty">${t("firstMsg")}</div>`;
-      body.scrollTop = body.scrollHeight;
-    }
-
-    function useTemplate(text) {
-      const inp = document.getElementById("msgInput");
-      inp.value = text;
-      inp.focus();
-    }
-
-    async function sendMessage() {
-      const inp = document.getElementById("msgInput");
-      const text = inp.value.trim();
-      if (!text || !activeNodeId) return;
-      inp.value = "";
-      await fetch("/api/chats/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-FunPay-Key": fpKey },
-        body: JSON.stringify({ node_id: activeNodeId, text }),
-      });
-      await fetchMessages();
-    }
-
-    function stopPolling() { if (pollTimer) clearInterval(pollTimer); }
-    function closeAll() {
-      stopPolling();
-      document.getElementById("overlay").classList.remove("open");
-      document.getElementById("authModal").classList.remove("open");
-      document.getElementById("detailModal").classList.remove("open");
-      document.getElementById("chatDrawer").classList.remove("open");
-    }
-    function escapeHtml(s) { return String(s || "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-    function escapeJs(s) { return String(s || "").replace(/'/g, "\\'"); }
-
-    applyLang();
-    checkAuth();
-    loadLots();
-    setInterval(() => loadLots(false, true), 30000);
-  </script>
-</body>
-</html>
+import gc
+import json
+import os
+import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from typing import Optional
+import requests
+from bs4 import BeautifulSoup
+from lxml import html as lxml_html
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+app = FastAPI(title="FP // PARSER")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+PROXY_URL = os.getenv("PROXY_URL", "").strip()
+PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+GAMES = {
+    "dota2": {"name": "Dota 2", "url": "https://funpay.com/lots/81/"},
+    "valorant": {"name": "Valorant", "url": "https://funpay.com/lots/612/"},
+}
+
+LOTS_CACHE = {"timestamp": 0, "data": [], "errors": {}, "updating": False}
+RATES_CACHE = {"timestamp": 0, "rates": {"RUB": 1.0, "USD": 0.0105, "KZT": 5.2}}
+USER_SESSIONS = {}
+
+
+class SendMessageReq(BaseModel):
+    node_id: str
+    text: str
+
+
+def fp_request(method: str, url: str, **kwargs) -> requests.Response:
+    headers = {**HEADERS, **kwargs.pop("headers", {})}
+    cookies = {"cy": "rub", "locale": "ru", **kwargs.pop("cookies", {})}
+    return requests.request(
+        method=method,
+        url=url,
+        headers=headers,
+        cookies=cookies,
+        proxies=PROXIES,
+        timeout=kwargs.pop("timeout", (5, 10)),
+        **kwargs,
+    )
+
+
+def update_exchange_rates():
+    now = time.time()
+    if now - RATES_CACHE["timestamp"] < 3600:
+        return
+    try:
+        r = requests.get("https://open.er-api.com/v6/latest/RUB", timeout=5)
+        data = r.json()
+        if data.get("result") == "success":
+            rates = data.get("rates", {})
+            if "USD" in rates and "KZT" in rates:
+                RATES_CACHE["rates"] = {
+                    "RUB": 1.0,
+                    "USD": float(rates["USD"]),
+                    "KZT": float(rates["KZT"]),
+                }
+                RATES_CACHE["timestamp"] = now
+    except Exception:
+        pass
+
+
+def parse_game_lots(game_key: str, url: str) -> tuple[str, list, Optional[str]]:
+    lots = []
+    try:
+        resp = fp_request("GET", url)
+        resp.raise_for_status()
+
+        tree = lxml_html.fromstring(resp.content)
+        items = tree.xpath('//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ")]')[:120]
+
+        for item in items:
+            href = item.get("href", "")
+            lot_id_match = re.search(r"id=(\d+)", href)
+            lot_id = lot_id_match.group(1) if lot_id_match else href
+
+            desc_nodes = item.xpath('.//*[contains(@class, "tc-desc-text")]')
+            desc = " ".join(desc_nodes[0].text_content().split()) if desc_nodes else "Без описания"
+
+            tags = []
+            for col in item.xpath('.//*[contains(@class, "tc-server") or contains(@class, "tc-side") or contains(@class, "tc-amount")]'):
+                txt = " ".join(col.text_content().split())
+                if txt:
+                    tags.append(txt)
+
+            seller_nodes = item.xpath('.//*[contains(@class, "media-user-name")]')
+            seller = seller_nodes[0].text_content().strip() if seller_nodes else "Продавец"
+
+            seller_id = None
+            avatar_nodes = item.xpath('.//*[contains(@class, "avatar-photo")]')
+            if avatar_nodes and avatar_nodes[0].get("data-href"):
+                m = re.search(r"/users/(\d+)/", avatar_nodes[0].get("data-href"))
+                if m:
+                    seller_id = int(m.group(1))
+
+            rev_nodes = item.xpath('.//*[contains(@class, "rating-mini-count")]')
+            reviews = rev_nodes[0].text_content().strip() if rev_nodes else "0"
+
+            price_nodes = item.xpath('.//*[contains(@class, "tc-price")]')
+            price_val = 0.0
+            price_str = "—"
+            if price_nodes:
+                price_str = " ".join(price_nodes[0].text_content().split())
+                try:
+                    price_val = float(price_nodes[0].get("data-s", 0))
+                except ValueError:
+                    price_val = 0.0
+
+            lots.append({
+                "id": lot_id,
+                "game": game_key,
+                "game_name": GAMES[game_key]["name"],
+                "title": desc[:110] + ("..." if len(desc) > 110 else ""),
+                "description": desc,
+                "tags": tags,
+                "price": price_val,
+                "price_str": price_str,
+                "seller": seller,
+                "seller_id": seller_id,
+                "reviews": reviews,
+                "online": item.get("data-online") == "1",
+                "url": href if href.startswith("http") else f"https://funpay.com{href}",
+            })
+
+        del resp, tree, items
+        gc.collect()
+        return game_key, lots, None
+    except Exception as e:
+        return game_key, [], str(e)
+
+
+def refresh_cache_sync():
+    if LOTS_CACHE["updating"]:
+        return
+    LOTS_CACHE["updating"] = True
+    try:
+        update_exchange_rates()
+        all_lots = []
+        errors = {}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(parse_game_lots, k, v["url"]) for k, v in GAMES.items()]
+            for f in futures:
+                g_key, g_lots, err = f.result()
+                all_lots.extend(g_lots)
+                if err:
+                    errors[g_key] = err
+        if all_lots:
+            LOTS_CACHE["data"] = all_lots
+        LOTS_CACHE["errors"] = errors
+        LOTS_CACHE["timestamp"] = time.time()
+    finally:
+        LOTS_CACHE["updating"] = False
+
+
+def background_updater():
+    while True:
+        refresh_cache_sync()
+        time.sleep(90)
+
+
+@app.on_event("startup")
+def start_bg_worker():
+    threading.Thread(target=background_updater, daemon=True).start()
+
+
+def get_fp_session(golden_key: str) -> dict:
+    if not golden_key:
+        raise HTTPException(status_code=401, detail="Не передан golden_key")
+
+    cached = USER_SESSIONS.get(golden_key)
+    if cached and (time.time() - cached["ts"] < 600):
+        return cached
+
+    resp = fp_request("GET", "https://funpay.com/", cookies={"golden_key": golden_key})
+    soup = BeautifulSoup(resp.text, "lxml")
+    body = soup.find("body")
+    if not body or not body.get("data-app-data"):
+        raise HTTPException(status_code=401, detail="FunPay не вернул данные сессии (проверь прокси или ключ)")
+
+    app_data = json.loads(body["data-app-data"])
+    user_id = app_data.get("userId", 0)
+    csrf = app_data.get("csrf-token", "")
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Неверный или устаревший golden_key")
+
+    name_el = soup.select_one(".user-link-name")
+    username = name_el.get_text(strip=True) if name_el else f"User #{user_id}"
+
+    session_data = {
+        "csrf": csrf,
+        "user_id": int(user_id),
+        "username": username,
+        "ts": time.time(),
+    }
+    USER_SESSIONS[golden_key] = session_data
+    return session_data
+
+
+@app.get("/")
+def serve_frontend():
+    return FileResponse("index.html")
+
+
+@app.get("/api/lots")
+def api_lots(force: bool = False):
+    if force:
+        refresh_cache_sync()
+    elif not LOTS_CACHE["data"] and not LOTS_CACHE["updating"]:
+        refresh_cache_sync()
+
+    return {
+        "count": len(LOTS_CACHE["data"]),
+        "proxy_active": bool(PROXIES),
+        "rates": RATES_CACHE["rates"],
+        "errors": LOTS_CACHE["errors"],
+        "updated_at": int(LOTS_CACHE["timestamp"]),
+        "lots": LOTS_CACHE["data"],
+    }
+
+
+@app.get("/api/auth")
+def api_auth(x_funpay_key: Optional[str] = Header(None)):
+    sess = get_fp_session(x_funpay_key)
+    return {
+        "authenticated": True,
+        "user_id": sess["user_id"],
+        "username": sess["username"],
+    }
+
+
+@app.get("/api/chats")
+def api_chats(x_funpay_key: Optional[str] = Header(None)):
+    get_fp_session(x_funpay_key)
+    resp = fp_request("GET", "https://funpay.com/chat/", cookies={"golden_key": x_funpay_key})
+    soup = BeautifulSoup(resp.text, "lxml")
+    chats = []
+
+    for c in soup.select("a.contact-item"):
+        node_id = c.get("data-id")
+        name_el = c.select_one(".media-user-name")
+        msg_el = c.select_one(".contact-item-message")
+        time_el = c.select_one(".contact-item-time")
+        unread = "unread" in c.get("class", [])
+
+        chats.append({
+            "node_id": node_id,
+            "name": name_el.get_text(strip=True) if name_el else "Чат",
+            "last_message": msg_el.get_text(" ", strip=True) if msg_el else "",
+            "time": time_el.get_text(strip=True) if time_el else "",
+            "unread": unread,
+        })
+    return {"chats": chats}
+
+
+@app.get("/api/chats/{node_id}")
+def api_chat_messages(node_id: str, x_funpay_key: Optional[str] = Header(None)):
+    sess = get_fp_session(x_funpay_key)
+    resp = fp_request("GET", f"https://funpay.com/chat/?node={node_id}", cookies={"golden_key": x_funpay_key})
+    soup = BeautifulSoup(resp.text, "lxml")
+    messages = []
+
+    real_node = soup.select_one(".chat")
+    actual_node_id = real_node.get("data-id") if real_node and real_node.get("data-id") else node_id
+
+    for m in soup.select(".chat-msg-item"):
+        author_el = m.select_one(".chat-msg-author-link")
+        text_el = m.select_one(".chat-msg-text")
+        date_el = m.select_one(".chat-msg-date")
+
+        author = author_el.get_text(strip=True) if author_el else ""
+        is_me = (author == sess["username"])
+        text = text_el.get_text("\n", strip=True) if text_el else ""
+        date = date_el.get_text(strip=True) if date_el else ""
+
+        if text:
+            messages.append({
+                "id": m.get("id", ""),
+                "author": author,
+                "is_me": is_me,
+                "text": text,
+                "time": date,
+            })
+
+    return {"node_id": actual_node_id, "messages": messages[-40:]}
+
+
+@app.post("/api/chats/send")
+def api_send_message(req: SendMessageReq, x_funpay_key: Optional[str] = Header(None)):
+    sess = get_fp_session(x_funpay_key)
+
+    payload = {
+        "objects": json.dumps([{
+            "type": "chat_node",
+            "id": req.node_id,
+            "tag": "0",
+            "data": {"node": req.node_id, "last_message": -1, "content": ""},
+        }]),
+        "request": json.dumps({
+            "action": "chat_message",
+            "data": {
+                "node": req.node_id,
+                "last_message": -1,
+                "content": req.text,
+            },
+        }),
+        "csrf_token": sess["csrf"],
+    }
+
+    send_headers = {
+        "x-requested-with": "XMLHttpRequest",
+        "origin": "https://funpay.com",
+        "referer": f"https://funpay.com/chat/?node={req.node_id}",
+    }
+
+    resp = fp_request(
+        "POST",
+        "https://funpay.com/runner/",
+        headers=send_headers,
+        cookies={"golden_key": x_funpay_key},
+        data=payload,
+    )
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=500, detail="Не удалось отправить сообщение на FunPay")
+
+    return {"ok": True}
