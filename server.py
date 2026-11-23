@@ -2,10 +2,13 @@ import gc
 import json
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 import requests
 from bs4 import BeautifulSoup
+from lxml import html as lxml_html
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -21,11 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================= НАСТРОЙКА ПРОКСИ =================
-# Задается через Environment Variables на Render.com (ключ: PROXY_URL)
-# либо впиши прямо сюда: "http://login:pass@ip:port" или "socks5h://login:pass@ip:port"
 PROXY_URL = os.getenv("PROXY_URL", "").strip()
-
 PROXIES = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
 
 HEADERS = {
@@ -39,7 +38,7 @@ GAMES = {
     "valorant": {"name": "Valorant", "url": "https://funpay.com/lots/612/"},
 }
 
-LOTS_CACHE = {"timestamp": 0, "data": []}
+LOTS_CACHE = {"timestamp": 0, "data": [], "errors": {}, "updating": False}
 USER_SESSIONS = {}
 
 
@@ -55,52 +54,54 @@ def fp_request(method: str, url: str, **kwargs) -> requests.Response:
         url=url,
         headers=headers,
         proxies=PROXIES,
-        timeout=kwargs.pop("timeout", 10),
+        timeout=kwargs.pop("timeout", (5, 10)),
         **kwargs,
     )
 
 
-def parse_game_lots(game_key: str, url: str) -> tuple[list, Optional[str]]:
+def parse_game_lots(game_key: str, url: str) -> tuple[str, list, Optional[str]]:
     lots = []
     try:
         resp = fp_request("GET", url)
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "lxml")
 
-        for item in soup.select("a.tc-item")[:150]:
+        tree = lxml_html.fromstring(resp.content)
+        items = tree.xpath('//a[contains(concat(" ", normalize-space(@class), " "), " tc-item ")]')[:120]
+
+        for item in items:
             href = item.get("href", "")
             lot_id_match = re.search(r"id=(\d+)", href)
             lot_id = lot_id_match.group(1) if lot_id_match else href
 
-            desc_el = item.select_one(".tc-desc-text")
-            desc = desc_el.get_text(" ", strip=True) if desc_el else "Без описания"
+            desc_nodes = item.xpath('.//*[contains(@class, "tc-desc-text")]')
+            desc = " ".join(desc_nodes[0].text_content().split()) if desc_nodes else "Без описания"
 
-            tags = [
-                col.get_text(" ", strip=True)
-                for col in item.select(".tc-server, .tc-side, .tc-amount")
-                if col.get_text(strip=True)
-            ]
+            tags = []
+            for col in item.xpath('.//*[contains(@class, "tc-server") or contains(@class, "tc-side") or contains(@class, "tc-amount")]'):
+                txt = " ".join(col.text_content().split())
+                if txt:
+                    tags.append(txt)
 
-            seller_el = item.select_one(".media-user-name")
-            seller = seller_el.get_text(strip=True) if seller_el else "Продавец"
+            seller_nodes = item.xpath('.//*[contains(@class, "media-user-name")]')
+            seller = seller_nodes[0].text_content().strip() if seller_nodes else "Продавец"
 
             seller_id = None
-            avatar_el = item.select_one(".avatar-photo")
-            if avatar_el and avatar_el.get("data-href"):
-                m = re.search(r"/users/(\d+)/", avatar_el["data-href"])
+            avatar_nodes = item.xpath('.//*[contains(@class, "avatar-photo")]')
+            if avatar_nodes and avatar_nodes[0].get("data-href"):
+                m = re.search(r"/users/(\d+)/", avatar_nodes[0].get("data-href"))
                 if m:
                     seller_id = int(m.group(1))
 
-            reviews_el = item.select_one(".rating-mini-count")
-            reviews = reviews_el.get_text(strip=True) if reviews_el else "0"
+            rev_nodes = item.xpath('.//*[contains(@class, "rating-mini-count")]')
+            reviews = rev_nodes[0].text_content().strip() if rev_nodes else "0"
 
-            price_el = item.select_one(".tc-price")
+            price_nodes = item.xpath('.//*[contains(@class, "tc-price")]')
             price_val = 0.0
             price_str = "—"
-            if price_el:
-                price_str = price_el.get_text(" ", strip=True)
+            if price_nodes:
+                price_str = " ".join(price_nodes[0].text_content().split())
                 try:
-                    price_val = float(price_el.get("data-s", 0))
+                    price_val = float(price_nodes[0].get("data-s", 0))
                 except ValueError:
                     price_val = 0.0
 
@@ -120,12 +121,44 @@ def parse_game_lots(game_key: str, url: str) -> tuple[list, Optional[str]]:
                 "url": href if href.startswith("http") else f"https://funpay.com{href}",
             })
 
-        soup.decompose()
-        del resp, soup
+        del resp, tree, items
         gc.collect()
-        return lots, None
+        return game_key, lots, None
     except Exception as e:
-        return [], str(e)
+        return game_key, [], str(e)
+
+
+def refresh_cache_sync():
+    if LOTS_CACHE["updating"]:
+        return
+    LOTS_CACHE["updating"] = True
+    try:
+        all_lots = []
+        errors = {}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(parse_game_lots, k, v["url"]) for k, v in GAMES.items()]
+            for f in futures:
+                g_key, g_lots, err = f.result()
+                all_lots.extend(g_lots)
+                if err:
+                    errors[g_key] = err
+        if all_lots:
+            LOTS_CACHE["data"] = all_lots
+        LOTS_CACHE["errors"] = errors
+        LOTS_CACHE["timestamp"] = time.time()
+    finally:
+        LOTS_CACHE["updating"] = False
+
+
+def background_updater():
+    while True:
+        refresh_cache_sync()
+        time.sleep(90)
+
+
+@app.on_event("startup")
+def start_bg_worker():
+    threading.Thread(target=background_updater, daemon=True).start()
 
 
 def get_fp_session(golden_key: str) -> dict:
@@ -169,22 +202,15 @@ def serve_frontend():
 
 @app.get("/api/lots")
 def api_lots(force: bool = False):
-    now = time.time()
-    errors = {}
-    if force or (now - LOTS_CACHE["timestamp"] > 60) or not LOTS_CACHE["data"]:
-        all_lots = []
-        for g_key, g_info in GAMES.items():
-            game_lots, err = parse_game_lots(g_key, g_info["url"])
-            all_lots.extend(game_lots)
-            if err:
-                errors[g_key] = err
-        LOTS_CACHE["data"] = all_lots
-        LOTS_CACHE["timestamp"] = now
+    if force:
+        refresh_cache_sync()
+    elif not LOTS_CACHE["data"] and not LOTS_CACHE["updating"]:
+        refresh_cache_sync()
 
     return {
         "count": len(LOTS_CACHE["data"]),
         "proxy_active": bool(PROXIES),
-        "errors": errors,
+        "errors": LOTS_CACHE["errors"],
         "updated_at": int(LOTS_CACHE["timestamp"]),
         "lots": LOTS_CACHE["data"],
     }
