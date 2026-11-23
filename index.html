@@ -71,7 +71,6 @@
       transition: background 0.4s ease, color 0.3s ease;
     }
 
-    /* ================= АНИМИРОВАННЫЙ СВЕТ ПОД СТЕКЛОМ ================= */
     .wallpaper {
       position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none;
     }
@@ -99,7 +98,6 @@
     @keyframes drift3 { to { transform: translate(12vw, -10vh) scale(1.18); } }
     #bgCanvas { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.55; }
 
-    /* ================= LIQUID GLASS ================= */
     .liquid {
       background: var(--glass-bg);
       backdrop-filter: blur(26px) saturate(185%) contrast(106%);
@@ -112,7 +110,6 @@
         inset 0 -1px 0.5px var(--rim-bottom);
     }
 
-    /* ================= HEADER ================= */
     header {
       position: sticky; top: 14px; z-index: 25;
       max-width: 1400px; margin: 14px auto 0;
@@ -141,20 +138,20 @@
     }
     .actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
-    /* ================= CONTROLS ================= */
     button, input, select {
       font-family: 'Unbounded', sans-serif;
       font-weight: 300; font-size: 11px;
+      height: 36px;
       background: var(--glass-bg); color: var(--text);
       backdrop-filter: blur(20px) saturate(170%);
       -webkit-backdrop-filter: blur(20px) saturate(170%);
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 8px 13px; outline: none;
+      padding: 0 14px; outline: none;
       box-shadow: inset 0 1px 0.5px var(--rim-top), inset 0 -1px 0.5px var(--rim-bottom);
       transition: transform 0.25s var(--ease), border-color 0.2s, background 0.2s, box-shadow 0.2s;
     }
-    button { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    button { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
     button:hover {
       border-color: var(--border-hover);
       background: var(--glass-hover);
@@ -171,16 +168,23 @@
       background: var(--accent); color: var(--accent-inv);
       border-color: var(--accent); font-weight: 500;
     }
-    button.icon-btn { padding: 8px 11px; }
+    button.icon-btn { width: 36px; padding: 0; }
     input::placeholder { color: var(--muted); }
     input:focus, select:focus { border-color: var(--border-hover); background: var(--glass-hover); }
-    select { cursor: pointer; }
+    select {
+      cursor: pointer;
+      appearance: none;
+      -webkit-appearance: none;
+      padding: 0 32px 0 14px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    }
     select option { background: var(--bg); color: var(--text); }
 
     .spin { display: inline-block; animation: spin360 0.8s linear infinite; }
     @keyframes spin360 { to { transform: rotate(360deg); } }
 
-    /* ================= TOOLBAR & ADVANCED FILTERS ================= */
     .toolbar-wrap {
       max-width: 1400px; margin: 16px auto 0; padding: 0 16px;
       display: flex; flex-direction: column; gap: 10px;
@@ -193,10 +197,14 @@
     .toolbar-row {
       display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     }
-    .tabs { display: flex; padding: 3px; gap: 3px; border-radius: 999px; }
+    .tabs {
+      display: inline-flex; align-items: center;
+      height: 36px; padding: 3px; gap: 3px; border-radius: 999px;
+    }
     .tab {
+      height: 28px; min-width: 32px;
       border: none; background: transparent; box-shadow: none; backdrop-filter: none;
-      padding: 6px 12px; font-size: 11px; color: var(--muted); border-radius: 999px;
+      padding: 0 12px; font-size: 11px; color: var(--muted); border-radius: 999px;
     }
     .tab:hover { color: var(--text); background: rgba(255,255,255,0.08); transform: none; }
     .tab.active {
@@ -214,7 +222,6 @@
     .adv-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 4px; }
     .stats { margin-left: auto; font-size: 11px; color: var(--muted); }
 
-    /* ================= GRID & GLASS CARDS ================= */
     main { max-width: 1400px; margin: 0 auto; padding: 18px 16px 90px; }
     .grid {
       display: grid;
@@ -281,6 +288,7 @@
       animation: pulse 2.2s ease-in-out infinite;
     }
     .fav-btn {
+      height: auto;
       background: transparent; border: none; box-shadow: none; backdrop-filter: none;
       padding: 2px 6px; font-size: 15px; color: var(--muted);
     }
@@ -310,7 +318,9 @@
     .seller { font-size: 10px; color: var(--muted); margin-top: 3px; }
     .card-btns { display: flex; gap: 6px; }
     .card-btns a, .card-btns button {
-      font-size: 10.5px; padding: 6px 11px; text-decoration: none;
+      height: 30px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 10.5px; padding: 0 11px; text-decoration: none;
       color: var(--text); border: 1px solid var(--border);
       border-radius: 999px; background: rgba(255, 255, 255, 0.06);
     }
@@ -326,7 +336,6 @@
     .grid.list-view .tags { margin-top: 0; max-width: 220px; }
     .grid.list-view .card-foot { border-top: none; padding-top: 0; min-width: 310px; justify-content: flex-end; align-items: center; gap: 14px; }
 
-    /* Skeleton */
     .skeleton {
       height: 186px; border-radius: 26px;
       background: linear-gradient(110deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.03) 75%);
@@ -337,7 +346,6 @@
     }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-    /* ================= TOAST NOTIFICATIONS ================= */
     .toast-stack {
       position: fixed; bottom: 20px; right: 20px; z-index: 60;
       display: flex; flex-direction: column; gap: 10px; max-width: 360px; width: calc(100% - 40px);
@@ -366,7 +374,6 @@
       background: var(--accent); color: var(--accent-inv); font-weight: 500;
     }
 
-    /* ================= MODALS & DRAWER ================= */
     .overlay {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.42);
       backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -421,7 +428,7 @@
     .msg.me { align-self: flex-end; background: var(--accent); color: var(--accent-inv); border-color: var(--accent); }
     .msg-meta { font-size: 9px; opacity: 0.65; margin-top: 5px; }
     .quick-replies { padding: 8px 20px 0; display: flex; gap: 6px; flex-wrap: wrap; }
-    .quick-replies button { font-size: 10px; padding: 5px 10px; color: var(--text-soft); }
+    .quick-replies button { height: 28px; font-size: 10px; padding: 0 10px; color: var(--text-soft); }
     .drawer-foot { padding: 12px 18px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
     .drawer-foot input { flex: 1; }
     .empty { text-align: center; padding: 70px 20px; color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
@@ -489,7 +496,6 @@
       <div class="stats" id="statsText">—</div>
     </div>
 
-    <!-- Расширенная панель фильтров -->
     <div class="adv-panel liquid" id="advPanel">
       <div class="adv-row">
         <span class="adv-label" data-i18n="priceLbl">Цена:</span>
@@ -528,7 +534,6 @@
     <div id="lotsContainer" class="grid"></div>
   </main>
 
-  <!-- Живые уведомления о новых лотах -->
   <div class="toast-stack" id="toastStack"></div>
 
   <div class="overlay" id="overlay" onclick="closeAll()"></div>
@@ -536,7 +541,7 @@
   <div class="modal" id="detailModal">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <span id="detailBadge" class="badge"></span>
-      <button onclick="closeAll()" style="padding:4px 10px; border:none; background:transparent; box-shadow:none;">✕</button>
+      <button onclick="closeAll()" style="height:28px; padding:0 10px; border:none; background:transparent; box-shadow:none;">✕</button>
     </div>
     <p id="detailDesc" style="color:var(--text); white-space:pre-wrap; max-height:260px; overflow-y:auto;"></p>
     <div id="detailTags" class="tags" style="margin-bottom:16px;"></div>
@@ -570,10 +575,10 @@
   <div class="drawer" id="chatDrawer">
     <div class="drawer-head">
       <div style="display:flex; align-items:center; gap:10px;">
-        <button id="backToChatsBtn" style="display:none; padding:4px 10px;" onclick="showChatList()">←</button>
+        <button id="backToChatsBtn" style="display:none; height:28px; padding:0 10px;" onclick="showChatList()">←</button>
         <span id="drawerTitle" style="font-size:12px;">ЧАТЫ FUNPAY</span>
       </div>
-      <button onclick="closeAll()" style="padding:4px 10px; border:none; background:transparent; box-shadow:none;">✕</button>
+      <button onclick="closeAll()" style="height:28px; padding:0 10px; border:none; background:transparent; box-shadow:none;">✕</button>
     </div>
     <div class="drawer-body" id="drawerBody"></div>
     <div id="quickReplies" class="quick-replies" style="display:none;"></div>
@@ -596,8 +601,8 @@
         online: "Онлайн", offline: "Офлайн", noRent: "Без аренды / буста",
         nativeMail: "Родная почта", autoDelivery: "Автовыдача", skinsFilter: "Аркана / Нож / Скины",
         highBeh: "Порядочность 10k+", reset: "Сбросить",
-        chatBtn: "Чат", write: "Написать", profitTag: "ВЫГОДА", estMarket: "Оценка ~",
-        newLotToast: "НОВЫЙ ЛОТ", goToLot: "Перейти на лот ↗",
+        chatBtn: "Чат", write: "Написать", profitTag: "ВЫГОДА", estMarket: "Рынок ~",
+        pcs: "шт.", newLotToast: "НОВЫЙ ЛОТ", goToLot: "Перейти на лот ↗",
         authTitle: "Авторизация FunPay",
         authDesc: "Вставь свой golden_key из cookies FunPay. Он хранится только в браузере и нужен для чатов.",
         keyPh: "Вставь golden_key...", logout: "Выйти", cancel: "Отмена", connect: "Подключить",
@@ -622,8 +627,8 @@
         online: "Online", offline: "Offline", noRent: "No rent / boost",
         nativeMail: "Original email", autoDelivery: "Auto-delivery", skinsFilter: "Arcana / Knife / Skins",
         highBeh: "10k+ Behavior", reset: "Reset",
-        chatBtn: "Chat", write: "Message", profitTag: "PROFIT", estMarket: "Est. ~",
-        newLotToast: "NEW LOT", goToLot: "Open lot ↗",
+        chatBtn: "Chat", write: "Message", profitTag: "PROFIT", estMarket: "Market ~",
+        pcs: "lots", newLotToast: "NEW LOT", goToLot: "Open lot ↗",
         authTitle: "FunPay Auth",
         authDesc: "Paste your golden_key from FunPay cookies. Stored locally in your browser for chat sync.",
         keyPh: "Paste golden_key...", logout: "Log out", cancel: "Cancel", connect: "Connect",
@@ -685,69 +690,105 @@
       renderLots();
     }
 
-    /* ================= АНАЛИЗ ВЫГОДЫ (ПЕРЕПРОДАЖА) ================= */
-    function enrichLot(l) {
-      const text = (l.description + " " + (l.tags || []).join(" ")).toLowerCase();
-      const reviewsNum = parseInt(String(l.reviews || "0").replace(/\D/g, ""), 10) || 0;
-      const isRentOrBoost = /аренд|rent|буст|boost|привязк|калибровк|отмыв|часы|часов\s*в\s*аренд/i.test(text);
+    /* ================= РЕАЛЬНАЯ РЫНОЧНАЯ МЕДИАНА (БЕЗ НАУГАД) ================= */
+    function getMedian(arr) {
+      if (!arr.length) return 0;
+      const s = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 !== 0 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+    }
 
-      // Извлекаем MMR для Dota 2
-      let mmr = 0;
-      if (l.game === "dota2") {
-        const m1 = text.match(/(\d{4,5})\s*(?:mmr|ммр|рейтинг|птс|pts)/i);
-        const m2 = text.match(/(?:mmr|ммр|рейтинг)\s*[:\-]?\s*(\d{4,5})/i);
-        if (m1) mmr = parseInt(m1[1], 10);
-        else if (m2) mmr = parseInt(m2[1], 10);
-        if (mmr > 16000) mmr = 0;
-      }
+    function processLotsWithMarket(rawLots) {
+      // Шаг 1: парсим параметры и определяем рыночную категорию (корзину)
+      const parsed = rawLots.map(l => {
+        const text = (l.description + " " + (l.tags || []).join(" ")).toLowerCase();
+        const reviewsNum = parseInt(String(l.reviews || "0").replace(/\D/g, ""), 10) || 0;
+        const isRentOrBoost = /аренд|rent|буст|boost|привязк|калибровк|отмыв|часы|часов\s*в\s*аренд/i.test(text);
 
-      // Оценка рыночной стоимости в рублях
-      let estRub = 0;
-      if (!isRentOrBoost && l.price >= 50) {
+        let mmr = 0;
         if (l.game === "dota2") {
-          if (mmr >= 7000) estRub += mmr * 0.65;
-          else if (mmr >= 5000) estRub += mmr * 0.45;
-          else if (mmr >= 3000) estRub += mmr * 0.30;
-          else if (mmr >= 1000) estRub += mmr * 0.22;
-          else estRub += 350;
+          const m1 = text.match(/(\d{4,5})\s*(?:mmr|ммр|рейтинг|птс|pts)/i);
+          const m2 = text.match(/(?:mmr|ммр|рейтинг)\s*[:\-]?\s*(\d{4,5})/i);
+          if (m1) mmr = parseInt(m1[1], 10);
+          else if (m2) mmr = parseInt(m2[1], 10);
+          if (mmr > 16000) mmr = 0;
+        }
 
-          if (/родн\w*\s*почт|перв\w*\s*письм|native/i.test(text)) estRub += 380;
-          if (/аркан|arcana/i.test(text)) estRub += 450;
-          if (/личность|persona|иммортал|immortal|коллектор|collector/i.test(text)) estRub += 320;
-          if (/10\s*000|10k|11\s*000|12\s*000|10000|11000|12000/i.test(text)) estRub += 150;
-        } else if (l.game === "valorant") {
-          estRub += 400;
-          if (/radiant|радиант/i.test(text)) estRub += 3200;
-          else if (/immortal|иммортал/i.test(text)) estRub += 1700;
-          else if (/ascendant|расцвет/i.test(text)) estRub += 900;
-          else if (/diamond|алмаз/i.test(text)) estRub += 600;
+        let bucket = null;
+        if (!isRentOrBoost && l.price >= 80) {
+          if (l.game === "dota2") {
+            if (mmr >= 1000) {
+              const step = Math.min(Math.floor(mmr / 1000), 8); // 1k..8k+
+              bucket = `dota_${step}k`;
+            } else if (/аркан|arcana/i.test(text)) {
+              bucket = "dota_arcana";
+            } else {
+              bucket = "dota_base";
+            }
+          } else if (l.game === "valorant") {
+            const skinsMatch = text.match(/(\d{1,3})\s*(?:скин|skin)/i);
+            const skinsCnt = skinsMatch ? parseInt(skinsMatch[1], 10) : 0;
 
-          if (/нож|knife|керамбит|бабочк|катана/i.test(text)) estRub += 750;
-          if (/vandal|вандал|phantom|фантом/i.test(text)) estRub += 350;
-          if (/родн\w*\s*почт|native|перв\w*\s*письм/i.test(text)) estRub += 450;
-
-          const skinsMatch = text.match(/(\d{1,3})\s*(?:скин|skin)/i);
-          if (skinsMatch) {
-            const cnt = Math.min(parseInt(skinsMatch[1], 10), 100);
-            estRub += cnt * 85;
+            if (/radiant|радиант/i.test(text)) bucket = "val_radiant";
+            else if (/immortal|иммортал/i.test(text)) bucket = "val_immortal";
+            else if (/ascendant|расцвет/i.test(text)) bucket = "val_ascendant";
+            else if (/diamond|алмаз/i.test(text)) bucket = "val_diamond";
+            else if (skinsCnt >= 40) bucket = "val_skins_40+";
+            else if (skinsCnt >= 15) bucket = "val_skins_15+";
+            else if (/нож|knife|керамбит|бабочк/i.test(text)) bucket = "val_knife";
+            else bucket = "val_base";
           }
         }
-      }
 
-      const profitRatio = (estRub > 0 && l.price > 0) ? (estRub - l.price) / l.price : 0;
-      const isProfitable = !isRentOrBoost && l.price >= 50 && profitRatio >= 0.30;
-      const profitPct = isProfitable ? Math.min(Math.round(profitRatio * 100), 350) : 0;
+        return { ...l, _text: text, _reviews: reviewsNum, _mmr: mmr, _isRent: isRentOrBoost, _bucket: bucket };
+      });
 
-      return {
-        ...l,
-        _text: text,
-        _reviews: reviewsNum,
-        _mmr: mmr,
-        _isRent: isRentOrBoost,
-        _estRub: Math.round(estRub),
-        _isProfitable: isProfitable,
-        _profitPct: profitPct,
-      };
+      // Шаг 2: собираем цены по корзинам
+      const bucketPrices = {};
+      parsed.forEach(l => {
+        if (!l._bucket) return;
+        if (!bucketPrices[l._bucket]) bucketPrices[l._bucket] = [];
+        bucketPrices[l._bucket].push(l.price);
+      });
+
+      // Шаг 3: считаем медиану для каждой корзины (только если >= 3 конкурентов)
+      const bucketStats = {};
+      Object.keys(bucketPrices).forEach(b => {
+        const prices = bucketPrices[b];
+        if (prices.length >= 3) {
+          bucketStats[b] = {
+            median: Math.round(getMedian(prices)),
+            count: prices.length,
+          };
+        }
+      });
+
+      // Шаг 4: сравниваем каждый лот с реальной медианой его корзины
+      return parsed.map(l => {
+        const stat = l._bucket ? bucketStats[l._bucket] : null;
+        let isProfitable = false;
+        let profitPct = 0;
+        let marketRub = 0;
+        let marketCount = 0;
+
+        if (stat && l.price >= 80 && stat.median > l.price) {
+          const ratio = (stat.median - l.price) / l.price;
+          marketRub = stat.median;
+          marketCount = stat.count;
+          if (ratio >= 0.25) {
+            isProfitable = true;
+            profitPct = Math.min(Math.round(ratio * 100), 300);
+          }
+        }
+
+        return {
+          ...l,
+          _estRub: marketRub,
+          _marketCount: marketCount,
+          _isProfitable: isProfitable,
+          _profitPct: profitPct,
+        };
+      });
     }
 
     /* ================= ЖИВЫЕ УВЕДОМЛЕНИЯ ================= */
@@ -761,7 +802,7 @@
       el.innerHTML = `
         <div class="toast-head">
           <span>${t("newLotToast")} · ${lot.game_name} ${lot._isProfitable ? `· ⚡ +${lot._profitPct}%` : ''}</span>
-          <button onclick="this.closest('.toast').remove()" style="padding:2px 6px; border:none; background:transparent; box-shadow:none;">✕</button>
+          <button onclick="this.closest('.toast').remove()" style="height:auto; padding:2px 6px; border:none; background:transparent; box-shadow:none;">✕</button>
         </div>
         <div class="toast-title">${escapeHtml(lot.description)}</div>
         <div class="toast-foot">
@@ -898,11 +939,10 @@
         const data = await res.json();
         if (data.rates) exchangeRates = data.rates;
 
-        const enriched = (data.lots || []).map(enrichLot);
+        const enriched = processLotsWithMarket(data.lots || []);
 
         if (!isFirstLoad) {
           const fresh = enriched.filter(l => !seenLotIds.has(l.id));
-          // Показываем до 2 уведомлений за раз (в приоритете выгодные)
           fresh.sort((a, b) => b._profitPct - a._profitPct).slice(0, 2).forEach(showToast);
         }
         enriched.forEach(l => seenLotIds.add(l.id));
@@ -939,7 +979,9 @@
       document.getElementById("detailDesc").textContent = l.description;
       document.getElementById("detailTags").innerHTML = l.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
       document.getElementById("detailPrice").textContent = formatPrice(l.price);
-      document.getElementById("detailEst").textContent = l._isProfitable ? `⚡ ${t("profitTag")} +${l._profitPct}% (${t("estMarket")} ${formatPrice(l._estRub)})` : "";
+      document.getElementById("detailEst").textContent = l._isProfitable
+        ? `⚡ ${t("profitTag")} +${l._profitPct}% (${t("estMarket")} ${formatPrice(l._estRub)}, ${l._marketCount} ${t("pcs")})`
+        : "";
       document.getElementById("detailSeller").textContent = `${l.seller} · ★ ${l.reviews}`;
       document.getElementById("detailLink").href = l.url;
       document.getElementById("detailChatBtn").onclick = () => {
@@ -1021,7 +1063,7 @@
           <div class="card-foot">
             <div>
               <div class="price">${escapeHtml(formatPrice(l.price))}</div>
-              ${l._isProfitable ? `<div class="est-price">${t("estMarket")} ${escapeHtml(formatPrice(l._estRub))}</div>` : ''}
+              ${l._isProfitable ? `<div class="est-price">${t("estMarket")} ${escapeHtml(formatPrice(l._estRub))} (${l._marketCount} ${t("pcs")})</div>` : ''}
               <div class="seller">${escapeHtml(l.seller)} · ★ ${escapeHtml(l.reviews)}</div>
             </div>
             <div class="card-btns">
@@ -1188,7 +1230,6 @@
     applyLang();
     checkAuth();
     loadLots();
-    // Фоновая проверка новых лотов каждые 30 секунд для уведомлений
     setInterval(() => loadLots(false, true), 30000);
   </script>
 </body>
